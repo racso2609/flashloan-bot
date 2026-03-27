@@ -19,3 +19,6 @@ fuzz_runs = 256
 src = "script"
 out = "out/script"
 libs = ["lib"]
+via_ir = true
+optimizer = true
+optimizer_runs = 200

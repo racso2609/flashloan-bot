@@ -71,7 +71,7 @@ contract DeployFlashloanScript is Script {
         string memory filename = "deployments/flashloan-arbitrum.json";
         
         // Create deployments directory if it doesn't exist
-        vm.createDir("deployments");
+        vm.createDir("deployments", true);
 
         // Write deployment info as JSON
         string memory json = string(abi.encodePacked(

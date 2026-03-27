@@ -66,10 +66,10 @@ echo ""
 echo -e "${YELLOW}Deploying contract...${NC}"
 echo ""
 
-# Deploy with or without verification
+# Deploy with or without verification (use script profile for via-ir)
 if [ -n "$ARBISCAN_API_KEY" ] && [ "$ARBISCAN_API_KEY" != "YOUR_ARBISCAN_API_KEY" ]; then
     echo -e "${GREEN}✓${NC} Arbiscan API key found, will verify contract..."
-    forge script script/DeployFlashloan.s.sol:DeployFlashloanScript \
+    FOUNDRY_PROFILE=script forge script script/DeployFlashloan.s.sol:DeployFlashloanScript \
         --rpc-url $ARBITRUM_RPC_URL \
         --private-key $PRIVATE_KEY \
         --broadcast \
@@ -79,7 +79,7 @@ if [ -n "$ARBISCAN_API_KEY" ] && [ "$ARBISCAN_API_KEY" != "YOUR_ARBISCAN_API_KEY
         -vvvv
 else
     echo -e "${YELLOW}⚠${NC} No Arbiscan API key, skipping verification..."
-    forge script script/DeployFlashloan.s.sol:DeployFlashloanScript \
+    FOUNDRY_PROFILE=script forge script script/DeployFlashloan.s.sol:DeployFlashloanScript \
         --rpc-url $ARBITRUM_RPC_URL \
         --private-key $PRIVATE_KEY \
         --broadcast \
