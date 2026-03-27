@@ -1,195 +1,132 @@
-// Configuration for the flashloan arbitrage bot
-// Default configuration for Arbitrum One
-require("dotenv").config();
+// Configuration for the flashloan arbitrage bot - BASE NETWORK
+require('dotenv').config();
 
-// Network configuration
-const ARBITRUM_CHAIN_ID = 42161;
+const BASE_CHAIN_ID = 8453;
 
 module.exports = {
   // Network info
-  NETWORK: "arbitrum-one",
-  CHAIN_ID: ARBITRUM_CHAIN_ID,
-
-  // RPC endpoint (use Alchemy, Infura, or local node)
-  RPC_URL:
-    process.env.ARBITRUM_RPC_URL ||
-    "https://arb-mainnet.g.alchemy.com/v2/YOUR_API_KEY",
-
-  // Private key for signing transactions (NEVER commit this!)
-  PRIVATE_KEY: process.env.PRIVATE_KEY || "0xYOUR_PRIVATE_KEY",
-
-  // Your deployed Flashloan contract address
-  FLASHLOAN_CONTRACT:
-    process.env.FLASHLOAN_CONTRACT || "0xYOUR_CONTRACT_ADDRESS",
-
-  // Aave V3 addresses on Arbitrum One
+  NETWORK: 'base',
+  CHAIN_ID: BASE_CHAIN_ID,
+  
+  // RPC endpoint
+  RPC_URL: process.env.BASE_RPC_URL || 'https://mainnet.base.org',
+  
+  // Private key
+  PRIVATE_KEY: process.env.PRIVATE_KEY || '0xYOUR_PRIVATE_KEY',
+  
+  // Deployed Flashloan contract address
+  FLASHLOAN_CONTRACT: process.env.FLASHLOAN_CONTRACT || '0xYOUR_CONTRACT_ADDRESS',
+  
+  // Aave V3 addresses on Base
   AAVE_V3: {
-    POOL: "0x794a61358D6845594F94dc1DB02A252b5b4814aD",
-    PROVIDER: "0xa97684ead0e402dC232d5A977953DF7ECBaB3CDb",
+    POOL: '0xA238Dd80C259a72e81d7e4664a9801593F98d1c5',
+    PROVIDER: '0xe20fCBdBfFC4Dd138cE8b2E6FBb6CB49777ad64D',
   },
-
-  // DEX Router addresses on Arbitrum One
+  
+  // DEX Router addresses on Base
   DEX_ROUTERS: {
-    UNISWAP_V3: "0xE592427A0AEce92De3Edee1F18E0157C05861564",
-    SUSHISWAP: "0x1b02dA8Cb0d097eB8D57A175b88c7D8b47997506",
-    CAMELOT: "0xc873fEcbd354f5A56E00E710B90EF4201db2448d",
-    UNISWAP_V3_QUOTER: "0xb27308f9F90D607463bb33eA1BeBb41C27CE5AB6",
+    AERODROME: '0x6Cb442acF35158D5eDa88fe602221b67B400Be3E',
+    SUSHISWAP: '0x6BDED42c6DA8FBf0d2bA55B2fa120C5e0c8D7891',
+    UNISWAP_V3: '0x2626664c2603336E57B271c5C0b26F421741e481',
+    UNISWAP_V3_QUOTER: '0x3d4e44B1d0040FbA06427a587790f548044dE79A',
   },
-
-  // Token addresses on Arbitrum One
+  
+  // Token addresses on Base
   TOKENS: {
-    WETH: "0x82aF49447D8a07e3bd95BD0d56f35241523fBab1",
-    USDC: "0xaf88d065e77c8cC2239327C5EDb3A432268e5831", // Native USDC
-    USDC_E: "0xFF970A61A04b1cA14834A43f5dE4533eBDDB5CC8", // Bridged USDC
-    USDT: "0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9",
-    DAI: "0xDA10009cBd5D07dd0CeCc66161FC93D7c9000da1",
-    WBTC: "0x2f2a2543B76A4166549F7aaB2e75Bef0aefC5B0f",
-    ARB: "0x912CE59144191C1204E64559FE8253a0e49E6548",
-    LINK: "0xf97f4df7a5759793cc5f7946d98b93fa65e77761",
-    GMX: "0xfc5A1A6EB076a2C7aD06eD22C90d7E710E35ad0a",
-    MAGIC: "0x539bdE0d7Dbd336b79148AA742883198BBF60342",
-    GRAIL: "0x3d9907F9a368ad07398Cd9123b0B3F9b39907d14",
+    WETH: '0x4200000000000000000000000000000000000006',
+    USDC: '0x833589FCD6eDb6E08f4c7C32D4f71B54bdA02913',  // Native USDC on Base
+    DAI: '0x50c5725949A6F0c72E6C4a641F24519985316338',
+    USDT: '0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2',
+    cbETH: '0x2Ae3F1Ec7F1F5012CFEab0185bfc7aa3cf0DEc22',
+    cbBTC: '0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf',
+    AERO: '0x940181a94A35A4569E4529A3CDfB74e38FD98631',
+    VELO: '0x9560e8358e835558269694Ed9eC9F6F97aFf6aC5',
   },
-
+  
   // Token decimals
   DECIMALS: {
     WETH: 18,
     USDC: 6,
-    USDC_E: 6,
-    USDT: 6,
     DAI: 18,
-    WBTC: 8,
-    ARB: 18,
-    LINK: 18,
-    GMX: 18,
-    MAGIC: 18,
-    GRAIL: 18,
+    USDT: 6,
+    cbETH: 18,
+    cbBTC: 8,
+    AERO: 18,
+    VELO: 18,
   },
-
-  // Trading pairs to monitor [tokenA, tokenB]
-  // MORE PAIRS = MORE OPPORTUNITIES
+  
+  // Trading pairs to monitor
   TRADING_PAIRS: [
-    // Main pairs
-    ["WETH", "USDC"],
-    ["WETH", "USDC_E"], // USDC.e often has price differences!
-    ["WETH", "USDT"],
-    ["WETH", "DAI"],
-    ["WBTC", "USDC"],
-    ["WBTC", "WETH"],
-
-    // Stablecoin pairs (good for triangular arb)
-    ["USDC", "USDC_E"], // Same dollar, different tokens!
-    ["USDC", "USDT"],
-    ["USDC", "DAI"],
-    ["USDC_E", "USDT"],
-
-    // Arbitrum ecosystem
-    ["ARB", "USDC"],
-    ["ARB", "WETH"],
-    ["ARB", "USDC_E"],
-
-    // DeFi tokens
-    ["GMX", "USDC"],
-    ["GMX", "WETH"],
-    ["LINK", "USDC"],
-    ["LINK", "WETH"],
-    ["MAGIC", "USDC"],
-    ["MAGIC", "WETH"],
-    ["GRAIL", "USDC"],
-    ["GRAIL", "WETH"],
+    ['WETH', 'USDC'],
+    ['WETH', 'DAI'],
+    ['WETH', 'USDT'],
+    ['cbETH', 'WETH'],
+    ['cbETH', 'USDC'],
+    ['cbBTC', 'WETH'],
+    ['cbBTC', 'USDC'],
+    ['USDC', 'DAI'],
+    ['USDC', 'USDT'],
+    ['AERO', 'WETH'],
+    ['AERO', 'USDC'],
   ],
-
-  // DEX pairs to compare - ADDING CAMELOT
+  
+  // DEX pairs to compare
   DEX_PAIRS: [
-    ["SUSHISWAP", "UNISWAP_V3"],
-    ["UNISWAP_V3", "SUSHISWAP"],
-    ["CAMELOT", "UNISWAP_V3"],
-    ["UNISWAP_V3", "CAMELOT"],
-    ["CAMELOT", "SUSHISWAP"],
-    ["SUSHISWAP", "CAMELOT"],
+    ['SUSHISWAP', 'AERODROME'],
+    ['AERODROME', 'SUSHISWAP'],
+    ['UNISWAP_V3', 'AERODROME'],
+    ['AERODROME', 'UNISWAP_V3'],
   ],
-
-  // Triangular arbitrage paths [tokenA, tokenB, tokenC, backToTokenA]
-  // Format: [firstToken, middleToken1, middleToken2, backToFirst]
+  
+  // Triangular paths
   TRIANGULAR_PATHS: [
-    // USDC routes
-    ["USDC", "WETH", "USDC_E", "USDC"],
-    ["USDC", "WETH", "USDT", "USDC"],
-    ["USDC", "WBTC", "WETH", "USDC"],
-    ["USDC", "ARB", "WETH", "USDC"],
-    ["USDC_E", "WETH", "USDC", "USDC_E"],
-    ["USDC", "WETH", "DAI", "USDC"],
-
-    // WETH routes
-    ["WETH", "USDC", "AR", "WETH"],
-    ["WETH", "USDC_E", "USDT", "WETH"],
-    ["WETH", "WBTC", "USDC", "WETH"],
+    ['USDC', 'WETH', 'DAI', 'USDC'],
+    ['USDC', 'WETH', 'USDT', 'USDC'],
+    ['USDC', 'DAI', 'WETH', 'USDC'],
+    ['WETH', 'USDC', 'cbETH', 'WETH'],
   ],
-
-  // Bot settings - OPTIMIZED FOR MORE OPPORTUNITIES
+  
+  // Bot settings
   SETTINGS: {
-    // Minimum profit in USD - LOWER = MORE OPPORTUNITIES
-    MIN_PROFIT_USD: parseFloat(process.env.MIN_PROFIT_USD || "1"),
-
-    // Maximum gas price in Gwei
-    MAX_GAS_PRICE_GWEI: parseFloat(process.env.MAX_GAS_PRICE_GWEI || "0.5"),
-
-    // Flashloan amounts for different tokens
+    MIN_PROFIT_USD: parseFloat(process.env.MIN_PROFIT_USD || '1'),
+    MAX_GAS_PRICE_GWEI: parseFloat(process.env.MAX_GAS_PRICE_GWEI || '0.5'),
+    
     FLASHLOAN_AMOUNTS: {
-      USDC: "1000000000", // 1000 USDC
-      USDC_E: "1000000000", // 1000 USDC.e
-      USDT: "1000000000", // 1000 USDT
-      WETH: "1000000000000000000", // 1 WETH
-      WBTC: "10000000", // 0.1 WBTC
-      ARB: "1000000000000000000000", // 1000 ARB
+      USDC: '1000000000',          // 1000 USDC
+      WETH: '1000000000000000000', // 1 WETH
+      DAI: '1000000000000000000',  // 1000 DAI
     },
-
-    // Default flashloan amount (USDC)
-    DEFAULT_FLASHLOAN: process.env.FLASHLOAN_AMOUNT || "1000000000",
-
-    // Slippage tolerance in basis points (100 = 1%)
-    SLIPPAGE_BPS: 50, // Tighter slippage = better profits
-
-    // Polling interval - FASTER = MORE OPPORTUNITIES
-    POLL_INTERVAL_MS: parseInt(process.env.POLL_INTERVAL_MS || "500"),
-
-    // Dry run mode
-    DRY_RUN: process.env.DRY_RUN === "true",
-
-    // Log level
-    LOG_LEVEL: process.env.LOG_LEVEL || "warn",
-
-    // Enable triangular arbitrage
+    
+    DEFAULT_FLASHLOAN: process.env.FLASHLOAN_AMOUNT || '1000000000',
+    SLIPPAGE_BPS: 50,
+    POLL_INTERVAL_MS: parseInt(process.env.POLL_INTERVAL_MS || '500'),
+    DRY_RUN: process.env.DRY_RUN === 'true',
+    LOG_LEVEL: process.env.LOG_LEVEL || 'warn',
     ENABLE_TRIANGULAR: true,
   },
-
-  // Flashloan ABI
+  
+  // ABIs
   FLASHLOAN_ABI: [
-    "function loan(address asset, uint256 amount, bytes calldata params) external",
-    "function executeOperation(address asset, uint256 amount, uint256 premium, address initiator, bytes calldata params) external returns (bool)",
-    "function rescueToken(address token, uint256 amount, address to) external",
-    "function owner() view returns (address)",
-    "event LoanRequested(address indexed asset, uint256 amount)",
-    "event OperationExecuted(address indexed asset, uint256 amount, uint256 premium, uint256 profit)",
+    'function loan(address asset, uint256 amount, bytes calldata params) external',
+    'function executeOperation(address asset, uint256 amount, uint256 premium, address initiator, bytes calldata params) external returns (bool)',
+    'function rescueToken(address token, uint256 amount, address to) external',
+    'event LoanRequested(address indexed asset, uint256 amount)',
+    'event OperationExecuted(address indexed asset, uint256 amount, uint256 premium, uint256 profit)',
   ],
-
-  // ERC20 ABI
+  
   ERC20_ABI: [
-    "function balanceOf(address owner) view returns (uint256)",
-    "function decimals() view returns (uint8)",
-    "function symbol() view returns (string)",
-    "function transfer(address to, uint256 amount) returns (bool)",
-    "function approve(address spender, uint256 amount) returns (bool)",
+    'function balanceOf(address owner) view returns (uint256)',
+    'function decimals() view returns (uint8)',
+    'function symbol() view returns (string)',
+    'function transfer(address to, uint256 amount) returns (bool)',
+    'function approve(address spender, uint256 amount) returns (bool)',
   ],
-
-  // Uniswap V2-compatible Router ABI (for SushiSwap, Camelot)
+  
   UNISWAP_V2_ROUTER_ABI: [
-    "function getAmountsOut(uint256 amountIn, address[] memory path) public view returns (uint256[] memory amounts)",
-    "function swapExactTokensForTokens(uint256 amountIn, uint256 amountOutMin, address[] calldata path, address to, uint256 deadline) external returns (uint256[] memory amounts)",
+    'function getAmountsOut(uint256 amountIn, address[] memory path) public view returns (uint256[] memory amounts)',
   ],
-
-  // Uniswap V3 Quoter ABI
+  
   UNISWAP_V3_QUOTER_ABI: [
-    "function quoteExactInputSingle(address tokenIn, address tokenOut, uint24 fee, uint256 amountIn, uint160 sqrtPriceLimitX96) external returns (uint256 amountOut)",
+    'function quoteExactInputSingle(address tokenIn, address tokenOut, uint24 fee, uint256 amountIn, uint160 sqrtPriceLimitX96) external returns (uint256 amountOut)',
   ],
 };
