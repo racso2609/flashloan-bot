@@ -1,20 +1,19 @@
-# Compiler files
-cache/
-out/
-
-# Ignores development broadcast logs
-!/broadcast
-/broadcast/*/31337/
-/broadcast/**/dry-run/
-
-# Docs
-docs/
-
-# Dotenv file
+# Environment
 .env
 
-# Bot dependencies
-bot/node_modules/
-logs/*.log
-bot/.env
+# Build artifacts
+out/
 broadcast/
+cache/
+logs/
+node_modules/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
