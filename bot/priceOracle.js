@@ -60,7 +60,6 @@ class PriceOracle {
     try {
       const router = this.routers[dexName];
       if (!router) {
-        console.debug(`DEX ${dexName} not available on this network`);
         return { amountOut: 0n, price: 0 };
       }
       
@@ -77,7 +76,7 @@ class PriceOracle {
       
       return { amountOut, price };
     } catch (error) {
-      console.error(`Error getting V2 price from ${dexName}:`, error.message);
+      // Silently return 0 for expected errors (no pool, identical addresses, etc.)
       return { amountOut: 0n, price: 0 };
     }
   }
@@ -108,7 +107,7 @@ class PriceOracle {
       
       return { amountOut, price };
     } catch (error) {
-      console.error(`Error getting V3 price:`, error.message);
+      // Silently return 0 for expected errors (no pool, etc.)
       return { amountOut: 0n, price: 0 };
     }
   }

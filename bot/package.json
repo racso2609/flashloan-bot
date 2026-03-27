@@ -9,7 +9,7 @@
     "dev": "LOG_LEVEL=debug DRY_RUN=true node index.js",
     "test": "node test.js",
     "lint": "echo 'No linter configured'",
-    "pm2:start": "pm2 start ../ecosystem.config.js",
+    "pm2:start": "pm2 start ./../ecosystem.config.js",
     "pm2:start:prod": "pm2 start ../ecosystem.config.js --env production",
     "pm2:stop": "pm2 stop flashloan-bot",
     "pm2:restart": "pm2 restart flashloan-bot",
@@ -26,6 +26,14 @@
     "pm2": "^5.3.0",
     "prettier": "^3.1.0"
   },
-  "keywords": ["flashloan", "arbitrage", "defi", "ethereum", "arbitrum", "aave", "uniswap"],
+  "keywords": [
+    "flashloan",
+    "arbitrage",
+    "defi",
+    "ethereum",
+    "arbitrum",
+    "aave",
+    "uniswap"
+  ],
   "license": "MIT"
 }
