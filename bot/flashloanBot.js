@@ -98,8 +98,9 @@ class FlashloanBot {
   async scanAndExecute() {
     logger.debug('Scanning for arbitrage opportunities...');
     
-    // Check gas price
-    const gasPrice = await this.provider.getGasPrice();
+    // Check gas price (ethers v6 uses getFeeData())
+    const feeData = await this.provider.getFeeData();
+    const gasPrice = feeData.gasPrice || 0n;
     const gasPriceGwei = Number(ethers.formatUnits(gasPrice, 'gwei'));
     
     if (gasPriceGwei > config.SETTINGS.MAX_GAS_PRICE_GWEI) {
@@ -107,8 +108,8 @@ class FlashloanBot {
       return;
     }
     
-    // Scan for opportunities
-    const flashloanAmount = BigInt(config.SETTINGS.FLASHLOAN_AMOUNT);
+    // Scan for opportunities (use default flashloan amount)
+    const flashloanAmount = BigInt(config.SETTINGS.DEFAULT_FLASHLOAN);
     const opportunities = await this.arbitrageFinder.scanForOpportunities(flashloanAmount);
     
     if (opportunities.length === 0) {
