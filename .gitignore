@@ -17,3 +17,4 @@ docs/
 bot/node_modules/
 logs/*.log
 bot/.env
+broadcast/
