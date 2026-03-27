@@ -16,3 +16,4 @@ docs/
 # Bot dependencies
 bot/node_modules/
 logs/*.log
+bot/.env

@@ -94,15 +94,8 @@ echo "  Deployment Complete!"
 echo "=========================================="
 echo -e "${NC}"
 
-# Check if deployment info was saved
-if [ -f "deployments/flashloan-arbitrum.json" ]; then
-    echo -e "${BLUE}Deployment info:${NC}"
-    cat deployments/flashloan-arbitrum.json
-    echo ""
-fi
-
 echo -e "${YELLOW}Next steps:${NC}"
-echo "1. Copy the contract address above"
+echo "1. Copy the contract address from output above"
 echo "2. Add it to your bot/.env file:"
 echo "   FLASHLOAN_CONTRACT=0xYourContractAddress"
 echo "3. Start the bot with: cd bot && npm start"
