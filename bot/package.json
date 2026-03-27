@@ -1,20 +1,31 @@
 {
   "name": "flashloan-arbitrage-bot",
   "version": "1.0.0",
-  "description": "Off-chain bot for flashloan arbitrage opportunities",
+  "description": "Off-chain bot for flashloan arbitrage opportunities on Arbitrum",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
     "dry-run": "DRY_RUN=true node index.js",
-    "test": "node test.js"
+    "dev": "LOG_LEVEL=debug DRY_RUN=true node index.js",
+    "test": "node test.js",
+    "lint": "echo 'No linter configured'",
+    "pm2:start": "pm2 start ../ecosystem.config.js",
+    "pm2:start:prod": "pm2 start ../ecosystem.config.js --env production",
+    "pm2:stop": "pm2 stop flashloan-bot",
+    "pm2:restart": "pm2 restart flashloan-bot",
+    "pm2:logs": "pm2 logs flashloan-bot",
+    "pm2:monit": "pm2 monit",
+    "pm2:save": "pm2 save",
+    "pm2:kill": "pm2 kill"
   },
   "dependencies": {
     "ethers": "^6.9.0",
     "dotenv": "^16.3.1"
   },
   "devDependencies": {
+    "pm2": "^5.3.0",
     "prettier": "^3.1.0"
   },
-  "keywords": ["flashloan", "arbitrage", "defi", "ethereum", "aave"],
+  "keywords": ["flashloan", "arbitrage", "defi", "ethereum", "arbitrum", "aave", "uniswap"],
   "license": "MIT"
 }

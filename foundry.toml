@@ -2,5 +2,20 @@
 src = "src"
 out = "out"
 libs = ["lib"]
+optimizer = true
+optimizer_runs = 200
+via_ir = false
 
 # See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options
+
+# RPC endpoints (use environment variables in .env)
+# arbitrum_one = "https://arb1.arbitrum.io/rpc"
+
+[profile.test]
+fuzz_runs = 256
+
+# Script configuration
+[profile.script]
+src = "script"
+out = "out/script"
+libs = ["lib"]
