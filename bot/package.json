@@ -1,0 +1,20 @@
+{
+  "name": "flashloan-arbitrage-bot",
+  "version": "1.0.0",
+  "description": "Off-chain bot for flashloan arbitrage opportunities",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dry-run": "DRY_RUN=true node index.js",
+    "test": "node test.js"
+  },
+  "dependencies": {
+    "ethers": "^6.9.0",
+    "dotenv": "^16.3.1"
+  },
+  "devDependencies": {
+    "prettier": "^3.1.0"
+  },
+  "keywords": ["flashloan", "arbitrage", "defi", "ethereum", "aave"],
+  "license": "MIT"
+}
