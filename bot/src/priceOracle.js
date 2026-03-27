@@ -84,17 +84,31 @@ class PriceOracle {
       const normalizedOut = normalizeAddress(tokenOut);
       const path = [normalizedIn, normalizedOut];
       
-      const amounts = await router.getAmountsOut(amountIn, path);
-      const amountOut = amounts[amounts.length - 1];
+      // Get amount out using staticCall
+      let amountOutNum;
+      try {
+        const amounts = await router.getAmountsOut.staticCall(amountIn, path);
+        amountOutNum = amounts[1]; // Direct index access
+      } catch (e) {
+        return { amountOut: 0n, price: 0 };
+      }
       
-      const tokenInDecimals = await this.getTokenDecimals(normalizedIn);
-      const tokenOutDecimals = await this.getTokenDecimals(normalizedOut);
+      let price = 0;
+      try {
+        const tokenInDecimals = await this.getTokenDecimals(normalizedIn);
+        const tokenOutDecimals = await this.getTokenDecimals(normalizedOut);
+        
+        // Use BigInt.toString() to avoid conversion issues
+        const amountOutStr = amountOutNum.toString();
+        const amountInStr = amountIn.toString();
+        price = (parseFloat(amountOutStr) / parseFloat(amountInStr)) * Math.pow(10, tokenInDecimals - tokenOutDecimals);
+      } catch (e) {
+        // Price calculation failed, but we still have amountOut
+      }
       
-      const price = Number(amountOut) / Number(amountIn) * 
-        (10 ** tokenInDecimals) / (10 ** tokenOutDecimals);
-      
-      return { amountOut, price };
+      return { amountOut: amountOutNum, price };
     } catch (error) {
+      console.log(`[getPriceV2] ${dexName} error: ${error.message.split('\n')[0]}`);
       // Silent fail - no liquidity or unsupported pair
       return { amountOut: 0n, price: 0 };
     }

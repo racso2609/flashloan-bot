@@ -155,8 +155,11 @@ class FlashloanBot {
       throw new Error("PRIVATE_KEY not set in .env file");
     }
 
+    // Get RPC URL (from env or use default)
+    const rpcUrl = process.env[config.rpcEnv] || config.defaultRpc;
+    
     // Initialize provider
-    this.provider = new ethers.JsonRpcProvider(config.defaultRpc);
+    this.provider = new ethers.JsonRpcProvider(rpcUrl);
 
     // Initialize wallet
     this.wallet = new ethers.Wallet(privateKey, this.provider);
