@@ -12,29 +12,37 @@ const QUOTER_ABI = [
   'function quoteExactInputSingle(address tokenIn, address tokenOut, uint24 fee, uint256 amountIn, uint160 sqrtPriceLimitX96) external returns (uint256 amountOut)',
 ];
 
-const UNISWAP_V3_QUOTER = '0xb27308f9F90D607463bb33eA1BeBb41C27CE5AB6';
-
 class PriceOracle {
   constructor(provider) {
     this.provider = provider;
     
-    // Initialize router contracts
-    this.routers = {
-      UNISWAP_V2: new ethers.Contract(
+    // Initialize router contracts (only for DEXes with valid addresses)
+    this.routers = {};
+    
+    // Add Uniswap V2 router if available
+    if (config.DEX_ROUTERS.UNISWAP_V2) {
+      this.routers.UNISWAP_V2 = new ethers.Contract(
         config.DEX_ROUTERS.UNISWAP_V2,
         ROUTER_ABI,
         provider
-      ),
-      SUSHISWAP: new ethers.Contract(
+      );
+    }
+    
+    // Add SushiSwap router if available
+    if (config.DEX_ROUTERS.SUSHISWAP) {
+      this.routers.SUSHISWAP = new ethers.Contract(
         config.DEX_ROUTERS.SUSHISWAP,
         ROUTER_ABI,
         provider
-      ),
-    };
+      );
+    }
     
-    // V3 quoter
+    // V3 quoter (use from config or default)
+    const quoterAddress = config.DEX_ROUTERS.UNISWAP_V3_QUOTER || 
+                          '0xb27308f9F90D607463bb33eA1BeBb41C27CE5AB6';
+    
     this.v3Quoter = new ethers.Contract(
-      UNISWAP_V3_QUOTER,
+      quoterAddress,
       QUOTER_ABI,
       provider
     );
@@ -51,7 +59,10 @@ class PriceOracle {
   async getPriceV2(dexName, tokenIn, tokenOut, amountIn) {
     try {
       const router = this.routers[dexName];
-      if (!router) throw new Error(`Unknown DEX: ${dexName}`);
+      if (!router) {
+        console.debug(`DEX ${dexName} not available on this network`);
+        return { amountOut: 0n, price: 0 };
+      }
       
       const path = [tokenIn, tokenOut];
       const amounts = await router.getAmountsOut(amountIn, path);
@@ -112,17 +123,21 @@ class PriceOracle {
   async getPricesFromAllDexes(tokenA, tokenB, amountIn) {
     const prices = {};
     
-    // Get V2 prices (Uniswap V2, SushiSwap)
+    // Get V2 prices (Uniswap V2, SushiSwap) - only for available routers
     for (const dexName of Object.keys(this.routers)) {
       const result = await this.getPriceV2(dexName, tokenA, tokenB, amountIn);
-      prices[dexName] = result;
+      if (result.amountOut > 0n) {
+        prices[dexName] = result;
+      }
     }
     
     // Get V3 prices with different fee tiers
-    const feeTiers = [500, 3000, 10000]; // 0.05%, 0.3%, 1%
+    const feeTiers = [100, 500, 3000, 10000]; // 0.01%, 0.05%, 0.3%, 1%
     for (const fee of feeTiers) {
       const result = await this.getPriceV3(tokenA, tokenB, fee, amountIn);
-      prices[`UNISWAP_V3_${fee}`] = result;
+      if (result.amountOut > 0n) {
+        prices[`UNISWAP_V3_${fee}`] = result;
+      }
     }
     
     return prices;
