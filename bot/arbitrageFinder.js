@@ -9,13 +9,7 @@ class ArbitrageFinder {
   }
 
   /**
-   * Find arbitrage opportunities between two DEXes
-   * @param {string} tokenAddress - Token address to arbitrage
-   * @param {string} tokenSymbol - Token symbol for logging
-   * @param {string} dex1 - First DEX name
-   * @param {string} dex2 - Second DEX name
-   * @param {bigint} flashloanAmount - Flashloan amount in token units
-   * @returns {Promise<Object|null>} Arbitrage opportunity or null
+   * Find 2-leg arbitrage between two DEXes
    */
   async findArbitrageOpportunity(tokenAddress, tokenSymbol, dex1, dex2, flashloanAmount) {
     const WETH = config.TOKENS.WETH;
@@ -32,11 +26,12 @@ class ArbitrageFinder {
     const profit = sellResult.amountOut - flashloanAmount;
     const profitPercent = Number(profit) / Number(flashloanAmount) * 100;
     
-    // Get Aave flashloan premium (0.05% for Aave V3)
-    const premium = (flashloanAmount * 5n) / 10000n; // 0.05%
+    // Aave flashloan premium (0.05%)
+    const premium = (flashloanAmount * 5n) / 10000n;
     const netProfit = profit - premium;
     
     return {
+      type: '2-leg',
       token: tokenAddress,
       tokenSymbol,
       dexBuy: dex1,
@@ -53,22 +48,51 @@ class ArbitrageFinder {
   }
 
   /**
-   * Scan all configured pairs for arbitrage opportunities
-   * @param {bigint} flashloanAmount - Flashloan amount
-   * @returns {Promise<Array>} Array of profitable opportunities
+   * Find triangular arbitrage opportunity
+   * Path: WETH → TokenA → TokenB → WETH
+   */
+  async findTriangularOpportunity(path, flashloanAmount) {
+    const WETH = config.TOKENS.WETH;
+    
+    // Execute the path through the best DEXes
+    const result = await this.priceOracle.getPriceThroughPath(path, flashloanAmount);
+    
+    if (!result.profitable || result.amountOut === 0n) {
+      return null;
+    }
+    
+    const profit = result.amountOut - flashloanAmount;
+    const profitPercent = Number(profit) / Number(flashloanAmount) * 100;
+    
+    // Aave flashloan premium (0.05%)
+    const premium = (flashloanAmount * 5n) / 10000n;
+    const netProfit = profit - premium;
+    
+    return {
+      type: 'triangular',
+      path,
+      flashloanAmount,
+      finalAmount: result.amountOut,
+      profit,
+      profitPercent,
+      premium,
+      netProfit,
+      isProfitable: netProfit > 0n,
+    };
+  }
+
+  /**
+   * Scan for all types of opportunities
    */
   async scanForOpportunities(flashloanAmount) {
     const opportunities = [];
     
+    // 1. Scan 2-leg arbitrage (DEX vs DEX)
     for (const [tokenA, tokenB] of config.TRADING_PAIRS) {
       const tokenAAddress = config.TOKENS[tokenA];
-      const tokenBAddress = config.TOKENS[tokenB];
-      
-      // Skip if token addresses aren't configured
-      if (!tokenAAddress || !tokenBAddress) continue;
+      if (!tokenAAddress) continue;
       
       for (const [dex1, dex2] of config.DEX_PAIRS) {
-        // Check both directions: buy on dex1, sell on dex2
         const opp1 = await this.findArbitrageOpportunity(
           tokenAAddress, tokenA, dex1, dex2, flashloanAmount
         );
@@ -76,12 +100,29 @@ class ArbitrageFinder {
           opportunities.push(opp1);
         }
         
-        // Check reverse: buy on dex2, sell on dex1
         const opp2 = await this.findArbitrageOpportunity(
           tokenAAddress, tokenA, dex2, dex1, flashloanAmount
         );
         if (opp2 && opp2.isProfitable) {
           opportunities.push(opp2);
+        }
+      }
+    }
+    
+    // 2. Scan triangular arbitrage (if enabled)
+    if (config.SETTINGS.ENABLE_TRIANGULAR) {
+      for (const pathSymbols of config.TRIANGULAR_PATHS) {
+        // Convert symbols to addresses
+        const path = pathSymbols.map(symbol => config.TOKENS[symbol]).filter(Boolean);
+        
+        if (path.length !== pathSymbols.length) continue;
+        
+        const opp = await this.findTriangularOpportunity(path, flashloanAmount);
+        if (opp && opp.isProfitable) {
+          opportunities.push({
+            ...opp,
+            tokenSymbol: pathSymbols.join(' → '),
+          });
         }
       }
     }
@@ -98,41 +139,51 @@ class ArbitrageFinder {
 
   /**
    * Build arbitrage parameters for the flashloan contract
-   * @param {Object} opportunity - Arbitrage opportunity object
-   * @returns {Object} Encoded arbitrage parameters
    */
   buildArbitrageParams(opportunity) {
     const WETH = config.TOKENS.WETH;
     
-    // Leg 1: Buy token on first DEX
-    const leg1 = {
-      dexType: 0, // UNISWAP_V2
-      router: config.DEX_ROUTERS[opportunity.dexBuy],
-      path: [WETH, opportunity.token],
-      fee: 0,
-      amountOutMin: 0, // TODO: Calculate with slippage
-    };
+    if (opportunity.type === '2-leg') {
+      // Standard 2-leg arbitrage
+      return {
+        leg1: {
+          dexType: 0,
+          router: config.DEX_ROUTERS[opportunity.dexBuy],
+          path: [WETH, opportunity.token],
+          fee: 0,
+          amountOutMin: 0,
+        },
+        leg2: {
+          dexType: 0,
+          router: config.DEX_ROUTERS[opportunity.dexSell],
+          path: [opportunity.token, WETH],
+          fee: 0,
+          amountOutMin: 0,
+        },
+      };
+    }
     
-    // Leg 2: Sell token on second DEX
-    const leg2 = {
-      dexType: 0, // UNISWAP_V2
-      router: config.DEX_ROUTERS[opportunity.dexSell],
-      path: [opportunity.token, WETH],
-      fee: 0,
-      amountOutMin: 0, // TODO: Calculate with slippage
-    };
-    
+    // Triangular - use first and last DEX from path
     return {
-      leg1,
-      leg2,
+      leg1: {
+        dexType: 0,
+        router: config.DEX_ROUTERS.SUSHISWAP, // Default to SushiSwap
+        path: [opportunity.path[0], opportunity.path[1]],
+        fee: 0,
+        amountOutMin: 0,
+      },
+      leg2: {
+        dexType: 0,
+        router: config.DEX_ROUTERS.CAMELOT, // Default to Camelot
+        path: [opportunity.path[1], opportunity.path[0]],
+        fee: 0,
+        amountOutMin: 0,
+      },
     };
   }
 
   /**
-   * Calculate minimum output with slippage protection
-   * @param {bigint} expectedOutput - Expected output amount
-   * @param {number} slippageBps - Slippage in basis points
-   * @returns {bigint} Minimum output after slippage
+   * Calculate minimum output with slippage
    */
   calculateMinOutput(expectedOutput, slippageBps = config.SETTINGS.SLIPPAGE_BPS) {
     const slippageMultiplier = 10000 - slippageBps;

@@ -2,16 +2,6 @@
 const { ethers } = require('ethers');
 const config = require('./config');
 
-// Uniswap V2 Router ABI (minimal for getting amounts out)
-const ROUTER_ABI = [
-  'function getAmountsOut(uint256 amountIn, address[] memory path) public view returns (uint256[] memory amounts)',
-];
-
-// Uniswap V3 Quoter ABI (for V3 price quotes)
-const QUOTER_ABI = [
-  'function quoteExactInputSingle(address tokenIn, address tokenOut, uint24 fee, uint256 amountIn, uint160 sqrtPriceLimitX96) external returns (uint256 amountOut)',
-];
-
 class PriceOracle {
   constructor(provider) {
     this.provider = provider;
@@ -19,47 +9,42 @@ class PriceOracle {
     // Initialize router contracts (only for DEXes with valid addresses)
     this.routers = {};
     
-    // Add Uniswap V2 router if available
-    if (config.DEX_ROUTERS.UNISWAP_V2) {
-      this.routers.UNISWAP_V2 = new ethers.Contract(
-        config.DEX_ROUTERS.UNISWAP_V2,
-        ROUTER_ABI,
-        provider
-      );
-    }
-    
-    // Add SushiSwap router if available
+    // Add SushiSwap router
     if (config.DEX_ROUTERS.SUSHISWAP) {
       this.routers.SUSHISWAP = new ethers.Contract(
         config.DEX_ROUTERS.SUSHISWAP,
-        ROUTER_ABI,
+        config.UNISWAP_V2_ROUTER_ABI,
         provider
       );
     }
     
-    // V3 quoter (use from config or default)
-    const quoterAddress = config.DEX_ROUTERS.UNISWAP_V3_QUOTER || 
-                          '0xb27308f9F90D607463bb33eA1BeBb41C27CE5AB6';
+    // Add Camelot router (V2-compatible)
+    if (config.DEX_ROUTERS.CAMELOT) {
+      this.routers.CAMELOT = new ethers.Contract(
+        config.DEX_ROUTERS.CAMELOT,
+        config.UNISWAP_V2_ROUTER_ABI,
+        provider
+      );
+    }
     
+    // V3 quoter for Uniswap V3
     this.v3Quoter = new ethers.Contract(
-      quoterAddress,
-      QUOTER_ABI,
+      config.DEX_ROUTERS.UNISWAP_V3_QUOTER,
+      config.UNISWAP_V3_QUOTER_ABI,
       provider
     );
   }
 
   /**
-   * Get price from Uniswap V2-compatible DEX
-   * @param {string} dexName - DEX name (UNISWAP_V2, SUSHISWAP)
-   * @param {string} tokenIn - Input token address
-   * @param {string} tokenOut - Output token address
-   * @param {bigint} amountIn - Input amount in token units
-   * @returns {Promise<{amountOut: bigint, price: number}>}
+   * Get price from V2-compatible DEX (SushiSwap, Camelot)
    */
   async getPriceV2(dexName, tokenIn, tokenOut, amountIn) {
     try {
       const router = this.routers[dexName];
-      if (!router) {
+      if (!router) return { amountOut: 0n, price: 0 };
+      
+      // Skip if same token
+      if (tokenIn.toLowerCase() === tokenOut.toLowerCase()) {
         return { amountOut: 0n, price: 0 };
       }
       
@@ -67,7 +52,6 @@ class PriceOracle {
       const amounts = await router.getAmountsOut(amountIn, path);
       const amountOut = amounts[amounts.length - 1];
       
-      // Calculate price (amountOut / amountIn, adjusted for decimals)
       const tokenInDecimals = await this.getTokenDecimals(tokenIn);
       const tokenOutDecimals = await this.getTokenDecimals(tokenOut);
       
@@ -76,27 +60,26 @@ class PriceOracle {
       
       return { amountOut, price };
     } catch (error) {
-      // Silently return 0 for expected errors (no pool, identical addresses, etc.)
       return { amountOut: 0n, price: 0 };
     }
   }
 
   /**
    * Get price from Uniswap V3
-   * @param {string} tokenIn - Input token address
-   * @param {string} tokenOut - Output token address
-   * @param {number} fee - Pool fee tier (500, 3000, 10000)
-   * @param {bigint} amountIn - Input amount in token units
-   * @returns {Promise<{amountOut: bigint, price: number}>}
    */
   async getPriceV3(tokenIn, tokenOut, fee, amountIn) {
     try {
+      // Skip if same token
+      if (tokenIn.toLowerCase() === tokenOut.toLowerCase()) {
+        return { amountOut: 0n, price: 0 };
+      }
+      
       const amountOut = await this.v3Quoter.quoteExactInputSingle.staticCall(
         tokenIn,
         tokenOut,
         fee,
         amountIn,
-        0 // No price limit
+        0
       );
       
       const tokenInDecimals = await this.getTokenDecimals(tokenIn);
@@ -107,22 +90,56 @@ class PriceOracle {
       
       return { amountOut, price };
     } catch (error) {
-      // Silently return 0 for expected errors (no pool, etc.)
       return { amountOut: 0n, price: 0 };
     }
   }
 
   /**
-   * Get prices from multiple DEXes for a token pair
-   * @param {string} tokenA - First token address
-   * @param {string} tokenB - Second token address
-   * @param {bigint} amountIn - Input amount
-   * @returns {Promise<Object>} Prices from each DEX
+   * Get price through a path (for triangular arbitrage)
+   */
+  async getPriceThroughPath(path, amountIn) {
+    let currentAmount = amountIn;
+    
+    for (let i = 0; i < path.length - 1; i++) {
+      const tokenIn = path[i];
+      const tokenOut = path[i + 1];
+      
+      // Try each DEX and take the best price
+      let bestAmount = 0n;
+      
+      // Try V2 DEXes
+      for (const dexName of Object.keys(this.routers)) {
+        const result = await this.getPriceV2(dexName, tokenIn, tokenOut, currentAmount);
+        if (result.amountOut > bestAmount) {
+          bestAmount = result.amountOut;
+        }
+      }
+      
+      // Try V3 with different fees
+      for (const fee of [100, 500, 3000, 10000]) {
+        const result = await this.getPriceV3(tokenIn, tokenOut, fee, currentAmount);
+        if (result.amountOut > bestAmount) {
+          bestAmount = result.amountOut;
+        }
+      }
+      
+      if (bestAmount === 0n) {
+        return { amountOut: 0n, profitable: false };
+      }
+      
+      currentAmount = bestAmount;
+    }
+    
+    return { amountOut: currentAmount, profitable: true };
+  }
+
+  /**
+   * Get prices from all DEXes for a token pair
    */
   async getPricesFromAllDexes(tokenA, tokenB, amountIn) {
     const prices = {};
     
-    // Get V2 prices (Uniswap V2, SushiSwap) - only for available routers
+    // Try V2 DEXes
     for (const dexName of Object.keys(this.routers)) {
       const result = await this.getPriceV2(dexName, tokenA, tokenB, amountIn);
       if (result.amountOut > 0n) {
@@ -130,9 +147,8 @@ class PriceOracle {
       }
     }
     
-    // Get V3 prices with different fee tiers
-    const feeTiers = [100, 500, 3000, 10000]; // 0.01%, 0.05%, 0.3%, 1%
-    for (const fee of feeTiers) {
+    // Try V3 with different fees
+    for (const fee of [100, 500, 3000, 10000]) {
       const result = await this.getPriceV3(tokenA, tokenB, fee, amountIn);
       if (result.amountOut > 0n) {
         prices[`UNISWAP_V3_${fee}`] = result;
@@ -143,11 +159,7 @@ class PriceOracle {
   }
 
   /**
-   * Get the best price for a token pair across all DEXes
-   * @param {string} tokenA - First token address
-   * @param {string} tokenB - Second token address
-   * @param {bigint} amountIn - Input amount
-   * @returns {Promise<{dex: string, amountOut: bigint, price: number}>}
+   * Get the best price for a token pair
    */
   async getBestPrice(tokenA, tokenB, amountIn) {
     const prices = await this.getPricesFromAllDexes(tokenA, tokenB, amountIn);
@@ -164,27 +176,6 @@ class PriceOracle {
   }
 
   /**
-   * Get the worst price for a token pair across all DEXes
-   * @param {string} tokenA - First token address
-   * @param {string} tokenB - Second token address
-   * @param {bigint} amountIn - Input amount
-   * @returns {Promise<{dex: string, amountOut: bigint, price: number}>}
-   */
-  async getWorstPrice(tokenA, tokenB, amountIn) {
-    const prices = await this.getPricesFromAllDexes(tokenA, tokenB, amountIn);
-    
-    let worstResult = { dex: null, amountOut: ethers.MaxUint256, price: Infinity };
-    
-    for (const [dex, result] of Object.entries(prices)) {
-      if (result.amountOut > 0 && result.amountOut < worstResult.amountOut) {
-        worstResult = { dex, ...result };
-      }
-    }
-    
-    return worstResult;
-  }
-
-  /**
    * Cache for token decimals
    */
   _decimalsCache = {};
@@ -198,10 +189,14 @@ class PriceOracle {
       return this._decimalsCache[addr];
     }
     
-    const token = new ethers.Contract(tokenAddress, config.ERC20_ABI, this.provider);
-    const decimals = await token.decimals();
-    this._decimalsCache[addr] = decimals;
-    return decimals;
+    try {
+      const token = new ethers.Contract(tokenAddress, config.ERC20_ABI, this.provider);
+      const decimals = await token.decimals();
+      this._decimalsCache[addr] = decimals;
+      return decimals;
+    } catch (error) {
+      return 18; // Default to 18 decimals
+    }
   }
 }
 
