@@ -1,6 +1,31 @@
 // Multi-chain configuration for Arbitrum and Base
 require('dotenv').config();
 
+// ABIs
+const FLASHLOAN_ABI = [
+  'function loan(address asset, uint256 amount, bytes calldata params) external',
+  'function executeOperation(address asset, uint256 amount, uint256 premium, address initiator, bytes calldata params) external returns (bool)',
+  'function rescueToken(address token, uint256 amount, address to) external',
+  'event LoanRequested(address indexed asset, uint256 amount)',
+  'event OperationExecuted(address indexed asset, uint256 amount, uint256 premium, uint256 profit)',
+];
+
+const ERC20_ABI = [
+  'function balanceOf(address owner) view returns (uint256)',
+  'function decimals() view returns (uint8)',
+  'function symbol() view returns (string)',
+  'function transfer(address to, uint256 amount) returns (bool)',
+  'function approve(address spender, uint256 amount) returns (bool)',
+];
+
+const UNISWAP_V2_ROUTER_ABI = [
+  'function getAmountsOut(uint256 amountIn, address[] memory path) public view returns (uint256[] memory amounts)',
+];
+
+const UNISWAP_V3_QUOTER_ABI = [
+  'function quoteExactInputSingle(address tokenIn, address tokenOut, uint24 fee, uint256 amountIn, uint160 sqrtPriceLimitX96) external returns (uint256 amountOut)',
+];
+
 const chains = {
   // ============================================
   // ARBITRUM ONE
@@ -67,10 +92,11 @@ const chains = {
     },
     
     dexes: {
-      AERODROME: '0x6Cb442acF35158D5eDa88fe602221b67B400Be3E',
-      SUSHISWAP: '0x6BDED42c6DA8FBf0d2bA55B2fa120C5e0c8D7891',
-      UNISWAP_V3: '0x2626664c2603336E57B271c5C0b26F421741e481',
-      UNISWAP_V3_QUOTER: '0x3d4e44B1d0040FbA06427a587790f548044dE79A',
+      // V2-style routers (these have getAmountsOut)
+      SUSHISWAP: '0x6BDED42c6DA8FBf0d2bA55B2fa120C5e0c8D7891',  // Only working V2 on Base
+      
+      // Uniswap V3 (quoter - may not have pools on Base)
+      UNISWAP_V3_SWAP_ROUTER: '0x2626664c2603336e57b271c5c0b26f421741e481',  // SwapRouter02
     },
     
     tokens: {
@@ -179,4 +205,9 @@ module.exports = {
   getChainConfig,
   getBotConfig,
   listChains,
+  // ABIs
+  FLASHLOAN_ABI,
+  ERC20_ABI,
+  UNISWAP_V2_ROUTER_ABI,
+  UNISWAP_V3_QUOTER_ABI,
 };

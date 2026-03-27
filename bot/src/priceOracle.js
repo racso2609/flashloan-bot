@@ -1,38 +1,69 @@
 // Price oracle module - fetches prices from different DEXes
 const { ethers } = require('ethers');
-const config = require('./config');
+const config = require('../config/config');
+
+// Helper to normalize address (ensures valid checksum)
+function normalizeAddress(address) {
+  try {
+    // Try checksummed first
+    return ethers.getAddress(address);
+  } catch {
+    // If that fails, use lowercase (for chains like Base that use case-insensitive addresses)
+    return address.toLowerCase();
+  }
+}
 
 class PriceOracle {
-  constructor(provider) {
+  constructor(provider, chainConfig) {
     this.provider = provider;
+    
+    // Use chain-specific config if provided, otherwise fallback to default
+    const cfg = chainConfig || config;
     
     // Initialize router contracts (only for DEXes with valid addresses)
     this.routers = {};
     
     // Add SushiSwap router
-    if (config.DEX_ROUTERS.SUSHISWAP) {
+    if (cfg.DEX_ROUTERS?.SUSHISWAP) {
       this.routers.SUSHISWAP = new ethers.Contract(
-        config.DEX_ROUTERS.SUSHISWAP,
+        normalizeAddress(cfg.DEX_ROUTERS.SUSHISWAP),
         config.UNISWAP_V2_ROUTER_ABI,
         provider
       );
     }
     
-    // Add Camelot router (V2-compatible)
-    if (config.DEX_ROUTERS.CAMELOT) {
+    // Add Camelot router (Arbitrum V2-compatible)
+    if (cfg.DEX_ROUTERS?.CAMELOT) {
       this.routers.CAMELOT = new ethers.Contract(
-        config.DEX_ROUTERS.CAMELOT,
+        normalizeAddress(cfg.DEX_ROUTERS.CAMELOT),
         config.UNISWAP_V2_ROUTER_ABI,
         provider
       );
     }
     
-    // V3 quoter for Uniswap V3
-    this.v3Quoter = new ethers.Contract(
-      config.DEX_ROUTERS.UNISWAP_V3_QUOTER,
-      config.UNISWAP_V3_QUOTER_ABI,
-      provider
-    );
+    // Add Velodrome router (Base)
+    if (cfg.DEX_ROUTERS?.VELODROME) {
+      this.routers.VELODROME = new ethers.Contract(
+        normalizeAddress(cfg.DEX_ROUTERS.VELODROME),
+        config.UNISWAP_V2_ROUTER_ABI,  // Velodrome supports V2-style getAmountsOut
+        provider
+      );
+    }
+    
+    // V3 quoter for Uniswap V3 (try both old and new quoter)
+    if (cfg.DEX_ROUTERS?.UNISWAP_V3_QUOTER_V2) {
+      this.v3Quoter = new ethers.Contract(
+        normalizeAddress(cfg.DEX_ROUTERS.UNISWAP_V3_QUOTER_V2),
+        config.UNISWAP_V3_QUOTER_V2_ABI,
+        provider
+      );
+    } else if (cfg.DEX_ROUTERS?.UNISWAP_V3_QUOTER) {
+      this.v3Quoter = new ethers.Contract(
+        normalizeAddress(cfg.DEX_ROUTERS.UNISWAP_V3_QUOTER),
+        config.UNISWAP_V3_QUOTER_ABI,
+        provider
+      );
+    }
   }
 
   /**
@@ -48,18 +79,23 @@ class PriceOracle {
         return { amountOut: 0n, price: 0 };
       }
       
-      const path = [tokenIn, tokenOut];
+      // Normalize addresses for ethers v6
+      const normalizedIn = normalizeAddress(tokenIn);
+      const normalizedOut = normalizeAddress(tokenOut);
+      const path = [normalizedIn, normalizedOut];
+      
       const amounts = await router.getAmountsOut(amountIn, path);
       const amountOut = amounts[amounts.length - 1];
       
-      const tokenInDecimals = await this.getTokenDecimals(tokenIn);
-      const tokenOutDecimals = await this.getTokenDecimals(tokenOut);
+      const tokenInDecimals = await this.getTokenDecimals(normalizedIn);
+      const tokenOutDecimals = await this.getTokenDecimals(normalizedOut);
       
       const price = Number(amountOut) / Number(amountIn) * 
         (10 ** tokenInDecimals) / (10 ** tokenOutDecimals);
       
       return { amountOut, price };
     } catch (error) {
+      // Silent fail - no liquidity or unsupported pair
       return { amountOut: 0n, price: 0 };
     }
   }

@@ -1,6 +1,6 @@
 // Arbitrage finder module - detects profitable opportunities
 const { ethers } = require('ethers');
-const config = require('./config');
+const config = require('../config/config');
 
 class ArbitrageFinder {
   constructor(provider, priceOracle) {

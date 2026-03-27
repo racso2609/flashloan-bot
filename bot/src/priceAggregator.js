@@ -1,7 +1,7 @@
 // Multi-source price aggregator
 // Uses multiple APIs and direct DEX queries for best results
 
-const config = require('./config');
+const config = require('../config/config');
 
 class PriceAggregator {
   constructor(provider) {

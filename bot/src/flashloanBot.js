@@ -1,6 +1,8 @@
 // Flashloan arbitrage bot - Multi-chain support with detailed logging
+require("dotenv").config();
+
 const { ethers } = require("ethers");
-const { getChainConfig } = require("./chains");
+const { getChainConfig, FLASHLOAN_ABI } = require("./chains");
 const PriceOracle = require("./priceOracle");
 const ArbitrageFinder = require("./arbitrageFinder");
 const SmartArbitrageFinder = require("./smartFinder");
@@ -127,26 +129,55 @@ class FlashloanBot {
     // Load chain config
     config = getChainConfig(chainName);
     this.chainName = chainName;
+    this.chainConfig = config;
+
+    // Add missing properties to chain config (needed by other modules)
+    config.SETTINGS = {
+      MIN_PROFIT_USD: parseFloat(process.env.MIN_PROFIT_USD || "0.5"),
+      MAX_GAS_PRICE_GWEI: parseFloat(process.env.MAX_GAS_PRICE_GWEI || "1"),
+      DEFAULT_FLASHLOAN: parseInt(process.env.FLASHLOAN_AMOUNT || "1000000000"),  // 1000 USDC (6 decimals)
+      SLIPPAGE_BPS: 50,
+      POLL_INTERVAL_MS: parseInt(process.env.POLL_INTERVAL_MS || "500"),
+      DRY_RUN: process.env.DRY_RUN !== "false",
+      LOG_LEVEL: process.env.LOG_LEVEL || "info",
+    };
+    
+    // Add DEX_ROUTERS and DECIMALS to config (needed by priceOracle, etc.)
+    config.DEX_ROUTERS = config.dexes;
+    config.DECIMALS = config.decimals;
+    
+    // Also expose TOKENS for convenience
+    config.TOKENS = config.tokens;
+
+    // Get private key directly from env (dotenv already loaded at top)
+    const privateKey = process.env.PRIVATE_KEY;
+    if (!privateKey || privateKey === "0xYOUR_PRIVATE_KEY") {
+      throw new Error("PRIVATE_KEY not set in .env file");
+    }
 
     // Initialize provider
-    this.provider = new ethers.JsonRpcProvider(config.RPC_URL);
+    this.provider = new ethers.JsonRpcProvider(config.defaultRpc);
 
     // Initialize wallet
-    this.wallet = new ethers.Wallet(config.PRIVATE_KEY, this.provider);
+    this.wallet = new ethers.Wallet(privateKey, this.provider);
+
+    // Store contract address for later use
+    this.contractAddress = process.env.FLASHLOAN_CONTRACT;
 
     // Initialize flashloan contract
     this.flashloanContract = new ethers.Contract(
-      config.FLASHLOAN_CONTRACT,
-      config.FLASHLOAN_ABI,
+      this.contractAddress,
+      FLASHLOAN_ABI,
       this.wallet,
     );
 
-    // Initialize modules
-    this.priceOracle = new PriceOracle(this.provider);
+    // Initialize modules (pass chain config for tokens/DEXes)
+    this.priceOracle = new PriceOracle(this.provider, config);
     this.arbitrageFinder = new ArbitrageFinder(this.provider, this.priceOracle);
     this.smartFinder = new SmartArbitrageFinder(
       this.provider,
       this.priceOracle,
+      config, // Pass chain config
     );
 
     // State
@@ -163,9 +194,9 @@ class FlashloanBot {
     console.log("\n" + "═".repeat(60));
     console.log("  🤖 FLASHLOAN ARBITRAGE BOT");
     console.log("═".repeat(60));
-    console.log(`  Chain:      ${config.NAME || this.chainName}`);
-    console.log(`  Network ID: ${config.CHAIN_ID}`);
-    console.log(`  Contract:   ${config.FLASHLOAN_CONTRACT || "NOT SET"}`);
+    console.log(`  Chain:      ${config.name || this.chainName}`);
+    console.log(`  Network ID: ${config.chainId}`);
+    console.log(`  Contract:   ${this.contractAddress || "NOT SET"}`);
     console.log("─".repeat(60));
     console.log(
       `  Mode:       ${config.SETTINGS.DRY_RUN ? "🧪 DRY RUN" : "🚀 LIVE"}`,
@@ -238,6 +269,11 @@ class FlashloanBot {
     // Scan for opportunities
     const smartOpps =
       await this.smartFinder.scanForOpportunities(flashloanAmount);
+
+    console.log(
+      `Scanned for opportunities with flashloan amount: ${formatAmount(flashloanAmount)} `,
+      smartOpps,
+    );
 
     // Filter and sort
     const opportunities = smartOpps

@@ -1,7 +1,7 @@
 // Default configuration - loads from chains.js based on CHAIN env var
 require('dotenv').config();
 
-const { getChainConfig } = require('./chains');
+const { getChainConfig } = require('../src/chains');
 
 // Get chain from environment or command line
 const chainName = process.env.CHAIN || process.argv[2] || 'arbitrum';
@@ -97,6 +97,11 @@ const config = {
   
   UNISWAP_V3_QUOTER_ABI: [
     'function quoteExactInputSingle(address tokenIn, address tokenOut, uint24 fee, uint256 amountIn, uint160 sqrtPriceLimitX96) external returns (uint256 amountOut)',
+  ],
+  
+  UNISWAP_V3_QUOTER_V2_ABI: [
+    'function quoteExactInputSingle((address tokenIn, address tokenOut, uint256 fee, uint256 amountIn, uint160 sqrtPriceLimitX96)) external returns (uint256 amountOut, uint160 sqrtPriceX96After, uint32 initializedTicksCrossed, uint256 gasEstimate)',
+    'function quoteExactInput(bytes path, uint256 amountIn) external returns (uint256 amountOut, uint160[] sqrtPriceX96AfterList)',
   ],
   
   // Explorer URL for logging

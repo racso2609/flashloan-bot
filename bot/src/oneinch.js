@@ -1,7 +1,7 @@
 // 1inch API integration for optimal route finding
 // Documentation: https://docs.1inch.io/docs/swap/api/get-quote
 
-const config = require('./config');
+const config = require('../config/config');
 
 const ONEINCH_API_BASE = 'https://api.1inch.dev';
 const CHAIN_ID = 42161; // Arbitrum

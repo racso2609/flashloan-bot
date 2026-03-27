@@ -3,11 +3,14 @@ const { configDotenv } = require("dotenv");
 const FlashloanBot = require("./flashloanBot");
 configDotenv();
 
+// Get chain from command line argument (default: arbitrum)
+const chainArg = process.argv[2] || process.env.CHAIN || 'arbitrum';
+
 // Handle graceful shutdown
 let bot;
 
 async function main() {
-  bot = new FlashloanBot();
+  bot = new FlashloanBot(chainArg);
 
   // Handle Ctrl+C
   process.on("SIGINT", () => {
