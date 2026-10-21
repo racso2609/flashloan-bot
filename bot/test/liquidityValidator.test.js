@@ -277,6 +277,23 @@ test("V2 excessive price impact is rejected", async () => {
   assert.strictEqual(ok, false);
 });
 
+test("V2 pair whose tokens do not match the traded pair is fail-closed", async () => {
+  // tokenIn/tokenOut are not the pair's tokens -> no meaningful spot -> reject
+  // rather than silently treating the trade as safe.
+  const v = makeValidator({ v2Pair: pair6({ reserveHuman: 5_000_000n }) });
+  v._decimals = async () => 6;
+  const ok = await v.isV2Tradeable(
+    "SUSHISWAP",
+    "0xDAI",
+    "0xUSDT",
+    10000n * 10n ** 6n,
+    9999n * 10n ** 6n,
+    6,
+    6,
+  );
+  assert.strictEqual(ok, false);
+});
+
 test("V2 tiny price impact is accepted", async () => {
   const v = makeValidator({ v2Pair: pair6({ reserveHuman: 5_000_000n }) });
   v._decimals = async () => 6;

@@ -271,13 +271,24 @@ class LiquidityValidator {
       try {
         const token0 = await c.token0();
         const token1 = await c.token1();
-        const dec0 = await this._decimals(token0);
-        const dec1 = await this._decimals(token1);
         const inIsToken0 =
           normalizeAddress(tokenIn) === normalizeAddress(token0);
-        const h0 = Number(r0) / 10 ** dec0;
-        const h1 = Number(r1) / 10 ** dec1;
-        if (h0 > 0 && h1 > 0) spotPrice = inIsToken0 ? h1 / h0 : h0 / h1;
+        const outIsToken1 =
+          normalizeAddress(tokenOut) === normalizeAddress(token1);
+        const inIsToken1 =
+          normalizeAddress(tokenIn) === normalizeAddress(token1);
+        const outIsToken0 =
+          normalizeAddress(tokenOut) === normalizeAddress(token0);
+        // The pair must actually trade this directed pair. If tokenIn/tokenOut
+        // are not the pair's own tokens, we cannot derive a meaningful spot and
+        // must not claim the trade is safe (fail-closed).
+        if ((inIsToken0 && outIsToken1) || (inIsToken1 && outIsToken0)) {
+          const dec0 = await this._decimals(token0);
+          const dec1 = await this._decimals(token1);
+          const h0 = Number(r0) / 10 ** dec0;
+          const h1 = Number(r1) / 10 ** dec1;
+          if (h0 > 0 && h1 > 0) spotPrice = inIsToken0 ? h1 / h0 : h0 / h1;
+        }
       } catch {
         spotPrice = null;
       }
