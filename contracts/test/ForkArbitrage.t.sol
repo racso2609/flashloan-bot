@@ -300,6 +300,112 @@ contract ForkArbitrageTest is Test {
         }
     }
 
+    /// @notice Fine search for the loan size that maximizes net profit after
+    /// gas. Because the 0.05% Aave premium and DEX fees are proportional while
+    /// gas is fixed, the optimum is where marginal edge stops covering the
+    /// per-unit fee erosion. Reports the full edge curve for the chosen route.
+    function test_arbitrum_optimal_size() public {
+        _runFork("ARBITRUM_RPC_URL", ARB_AAVE_POOL, ARB_AAVE_PROVIDER);
+
+        ChainCtx memory c = ChainCtx({
+            pool: ARB_AAVE_POOL,
+            provider: ARB_AAVE_PROVIDER,
+            quoter: ARB_UNI_V3_QUOTER,
+            sushi: ARB_SUSHI,
+            v3Router: ARB_UNI_V3_ROUTER,
+            usdc: ARB_USDC_E,
+            weth: ARB_WETH
+        });
+
+        uint24[4] memory fees = [uint24(100), 500, 3000, 10000];
+
+        // Gas cost in USDC (6d): EXEC_GAS_UNITS * gasPrice * ethPriceInUsdc.
+        uint256 gasUnits = 600_000;
+        uint256 gasPrice = tx.gasprice == 0 ? 20_000_000 : tx.gasprice; // wei per gas
+        uint256 gasCostWei = gasUnits * gasPrice; // ETH wei
+        // ETH price in USDC (6d): WETH->USDC.e on Sushi for 1e18 WETH.
+        uint256 oneEth = 1e18;
+        uint256[] memory ethOut = IV2Router(ARB_SUSHI).getAmountsOut(oneEth, _p(ARB_WETH, ARB_USDC_E));
+        uint256 ethPriceUsdc6 = ethOut[1]; // USDC.e (6d) per 1 ETH
+        uint256 gasCostUsdc6 = (gasCostWei * ethPriceUsdc6) / 1e18;
+
+        emit log_named_uint("gasPrice (wei)", gasPrice);
+        emit log_named_uint("ETH price (USDC 6d)", ethPriceUsdc6);
+        emit log_named_uint("gas cost (USDC 6d)", gasCostUsdc6);
+
+        // Fine exponential grid: 1..1024 USDC, plus a few large points.
+        uint256[11] memory sizes = [
+            uint256(1) * 10 ** 6,
+            2 * 10 ** 6,
+            5 * 10 ** 6,
+            10 * 10 ** 6,
+            25 * 10 ** 6,
+            50 * 10 ** 6,
+            100 * 10 ** 6,
+            250 * 10 ** 6,
+            500 * 10 ** 6,
+            1000 * 10 ** 6,
+            2000 * 10 ** 6
+        ];
+
+        int256 bestNet = type(int256).min;
+        uint256 bestSize;
+        uint256 bestFinal;
+        bool bestUniBuy;
+        uint24 bestFee;
+
+        for (uint256 s = 0; s < sizes.length; s++) {
+            (uint256 finalUsdc, bool uniBuy, uint24 fee, bool found) =
+                _scan(c.quoter, c.sushi, c.usdc, c.weth, fees, sizes[s]);
+            if (!found) {
+                emit log_named_uint("size: no route (usdc 6d)", sizes[s]);
+                continue;
+            }
+            uint256 debt = sizes[s] + (sizes[s] * 5) / 10000;
+            int256 edge = int256(finalUsdc) - int256(debt);
+            int256 net = edge - int256(gasCostUsdc6);
+
+            emit log_named_uint("size (6d)", sizes[s]);
+            emit log_named_int("  edge (6d)", edge);
+            emit log_named_int("  net after gas (6d)", net);
+            emit log_named_uint("  fee", fee);
+            emit log_named_string("  uniBuy", uniBuy ? "true" : "false");
+
+            if (net > bestNet) {
+                bestNet = net;
+                bestSize = sizes[s];
+                bestFinal = finalUsdc;
+                bestUniBuy = uniBuy;
+                bestFee = fee;
+            }
+        }
+
+        if (bestSize == 0) {
+            emit log("no quotable route; cannot optimise");
+            return;
+        }
+
+        uint256 bestDebt = bestSize + (bestSize * 5) / 10000;
+        emit log_named_uint("OPTIMAL size (6d)", bestSize);
+        emit log_named_int("OPTIMAL net (6d)", bestNet);
+        emit log_named_uint("OPTIMAL final (6d)", bestFinal);
+        emit log_named_uint("OPTIMAL debt (6d)", bestDebt);
+        emit log_named_string("OPTIMAL uniBuy", bestUniBuy ? "true" : "false");
+        emit log_named_uint("OPTIMAL fee", bestFee);
+
+        (uint256 profit, bool reverted) = _execute(c, bestUniBuy, bestFee, bestSize);
+
+        if (bestFinal > bestDebt) {
+            emit log_named_uint("EXECUTED PROFIT (6d)", profit);
+            assertFalse(reverted, "profitable optimal size must not revert");
+            assertGt(profit, 0, "profit must be positive");
+            assertGe(profit, uint256(bestNet > int256(0) ? bestNet : int256(0)), "realised >= modelled net");
+        } else {
+            emit log("optimal route still unprofitable after fees");
+            assertTrue(reverted, "unprofitable route must revert cleanly");
+        }
+    }
+
     /// @notice Pure Sushi round-trip on Arbitrum to prove loan() execution with
     /// two live V2 swaps (independent of V3 quoter behaviour).
     function test_arbitrum_sushi_roundtrip_executes() public {

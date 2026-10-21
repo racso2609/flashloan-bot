@@ -63,17 +63,19 @@ const config = {
     MAX_GAS_PRICE_GWEI: parseFloat(process.env.MAX_GAS_PRICE_GWEI || '1'),
     
     FLASHLOAN_AMOUNTS: {
-      // NOTE (fork-test findings): native USDC/WETH pools on Arbitrum Sushi are
-      // very thin; 1000 USDC incurs huge slippage. USDC.e (bridged) pools are
-      // deep and usable at this size. On Base, native USDC/WETH has no usable
-      // UniV3 pool at all.
-      USDC: '50000000',            // 50 USDC  (thin native-USDC pools)
-      USDC_E: '1000000000',        // 1000 USDC.e (Arbitrum deep pool)
-      WETH: '1000000000000000000', // 1 WETH
+      // NOTE (fork-test findings):
+      // - Native USDC/WETH Sushi on Arbitrum is very thin: 1000 USDC -> 0.193 WETH.
+      // - USDC.e (bridged) pools are deep on both UniV3/Sushi but round-trip
+      //   edge is currently negative at all sizes (edge maxes at smallest loan
+      //   but still < fees+premium; spreads change over time).
+      // - Base native USDC/WETH has no usable UniV3 pool (use Aerodrome instead).
+      USDC: '50000000',      // 50 USDC (thin native pools; reduce if needed)
+      USDC_E: '10000000',    // 10 USDC.e (deep; minimize size due to fee erosion)
+      WETH: '100000000000000000', // 0.1 WETH
       DAI: '1000000000000000000',  // 1000 DAI
     },
     
-    DEFAULT_FLASHLOAN: process.env.FLASHLOAN_AMOUNT || '1000000000',
+    DEFAULT_FLASHLOAN: process.env.FLASHLOAN_AMOUNT || '10000000', // 10 USDC.e
     SLIPPAGE_BPS: 50,
     POLL_INTERVAL_MS: parseInt(process.env.POLL_INTERVAL_MS || '500'),
     DRY_RUN: process.env.DRY_RUN !== 'false',
