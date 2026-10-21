@@ -2,10 +2,7 @@
 
 const test = require("node:test");
 const assert = require("node:assert");
-const {
-  bestRouteExcludingVenue,
-  isSameVenueRoundTrip,
-} = require("../src/routeValidation");
+const { bestRouteExcludingVenue } = require("../src/routeValidation");
 
 test("bestRouteExcludingVenue picks the best leg regardless of array order", () => {
   // Unordered input: the maximum cross-venue leg must win, not the first one.
@@ -40,28 +37,4 @@ test("bestRouteExcludingVenue ignores routes without a venue", () => {
 test("bestRouteExcludingVenue handles empty / null input", () => {
   assert.strictEqual(bestRouteExcludingVenue([], "A"), null);
   assert.strictEqual(bestRouteExcludingVenue(null, "A"), null);
-});
-
-test("isSameVenueRoundTrip detects identical known venues", () => {
-  assert.strictEqual(
-    isSameVenueRoundTrip("UNISWAP_V3_500", "UNISWAP_V3_500"),
-    true,
-  );
-  assert.strictEqual(
-    isSameVenueRoundTrip("UNISWAP_V3_500", "SUSHISWAP"),
-    false,
-  );
-});
-
-test("isSameVenueRoundTrip treats unknown venues as NOT the same", () => {
-  assert.strictEqual(isSameVenueRoundTrip(null, null), false);
-  assert.strictEqual(isSameVenueRoundTrip(undefined, undefined), false);
-  assert.strictEqual(isSameVenueRoundTrip(null, "SUSHISWAP"), false);
-  assert.strictEqual(isSameVenueRoundTrip("SUSHISWAP", undefined), false);
-});
-
-test("isSameVenueRoundTrip compares by value, not by truthiness", () => {
-  assert.strictEqual(isSameVenueRoundTrip("", ""), true);
-  assert.strictEqual(isSameVenueRoundTrip(0, 0), true);
-  assert.strictEqual(isSameVenueRoundTrip("", "SUSHISWAP"), false);
 });

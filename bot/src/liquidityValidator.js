@@ -197,7 +197,11 @@ class LiquidityValidator {
       const c = this._contractFactory(pool, config.UNISWAP_V3_POOL_ABI);
       const liquidity = await c.liquidity();
       if (liquidity < this.minV3Liquidity) return { ok: false };
-      return { ok: true, spotPrice: await this._v3SpotPrice(c, tokenIn) };
+      const spotPrice = await this._v3SpotPrice(c, tokenIn, tokenOut);
+      // If the pool's own tokens do not match the traded pair we cannot derive a
+      // meaningful spot (same fail-closed invariant as _probeV2).
+      if (spotPrice === undefined) return { ok: false };
+      return { ok: true, spotPrice };
     } catch {
       return { ok: false };
     }
@@ -207,7 +211,7 @@ class LiquidityValidator {
    * Human spot price (tokenOut per tokenIn) from a V3 pool's slot0.
    * Returns null when it cannot be derived; callers treat null as fail-closed.
    */
-  async _v3SpotPrice(poolContract, tokenIn) {
+  async _v3SpotPrice(poolContract, tokenIn, tokenOut) {
     try {
       const slot0 = await poolContract.slot0();
       const sqrtP = Number(slot0[0]) / 2 ** 96; // sqrt(price) in raw units
@@ -216,9 +220,20 @@ class LiquidityValidator {
       if (!Number.isFinite(raw) || raw <= 0) return null;
       const token0 = await poolContract.token0();
       const token1 = await poolContract.token1();
+      const inIsToken0 = normalizeAddress(tokenIn) === normalizeAddress(token0);
+      const outIsToken1 =
+        normalizeAddress(tokenOut) === normalizeAddress(token1);
+      const inIsToken1 = normalizeAddress(tokenIn) === normalizeAddress(token1);
+      const outIsToken0 =
+        normalizeAddress(tokenOut) === normalizeAddress(token0);
+      // The pool must actually trade this directed pair. If tokenIn/tokenOut are
+      // not the pool's own tokens, the spot would be meaningless — signal it so
+      // the caller fails closed.
+      if (!((inIsToken0 && outIsToken1) || (inIsToken1 && outIsToken0))) {
+        return undefined;
+      }
       const dec0 = await this._decimals(token0);
       const dec1 = await this._decimals(token1);
-      const inIsToken0 = normalizeAddress(tokenIn) === normalizeAddress(token0);
       // human(token1/token0) = raw * 10^(dec0-dec1)
       const spot = inIsToken0
         ? raw * 10 ** (dec0 - dec1)
@@ -318,15 +333,18 @@ class LiquidityValidator {
     const key = `dec:${normalizeAddress(tokenAddress)}`;
     const cached = this._getCached(key);
     if (cached !== undefined) return cached;
-    let d = 18;
     try {
       const c = this._contractFactory(tokenAddress, config.ERC20_ABI);
-      d = Number(await c.decimals());
+      const d = Number(await c.decimals());
+      if (!Number.isInteger(d) || d < 0 || d > 36) return 18;
+      this._setCached(key, d);
+      return d;
     } catch {
-      d = 18;
+      // A transient RPC failure must NOT be cached: caching the 18 fallback
+      // would poison any spot price derived from it for the whole TTL, silently
+      // discarding real opportunities. Return the default without persisting it.
+      return 18;
     }
-    this._setCached(key, d);
-    return d;
   }
 }
 

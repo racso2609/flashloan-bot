@@ -353,3 +353,43 @@ test("no factory configured -> cannot validate -> permissive", async () => {
 test("default max price impact is 2%", () => {
   assert.strictEqual(DEFAULT_MAX_PRICE_IMPACT_BPS, 200n);
 });
+
+test("V3 pool whose tokens do not match the traded pair is fail-closed", async () => {
+  // The pool is USDC/DAI but we ask about WBTC/DAI: the spot would be
+  // meaningless, so the validator must reject rather than trust a quote that
+  // happens to line up with the spurious spot (~1).
+  const v = makeValidator({ v3Pool: poolAt1({ liquidity: 10n ** 18n }) });
+  v._decimals = async (t) => (t === "0xUSDC" ? 6 : 18);
+  const ok = await v.isV3Tradeable(
+    "0xWBTC",
+    "0xDAI",
+    500,
+    10000n * 10n ** 6n,
+    9999n * 10n ** 18n,
+    6,
+    18,
+  );
+  assert.strictEqual(ok, false);
+});
+
+test("_decimals does not cache a transient RPC failure", async () => {
+  // A failing decimals() call must not poison the cache with the 18 fallback:
+  // the next call must retry and pick up the real value.
+  let calls = 0;
+  const v = new LiquidityValidator(
+    {},
+    { DEX_FACTORIES: {} },
+    {
+      contractFactory: () => ({
+        decimals: async () => {
+          calls += 1;
+          if (calls === 1) throw new Error("transient RPC");
+          return 6n;
+        },
+      }),
+    },
+  );
+  assert.strictEqual(await v._decimals("0xUSDC"), 18); // fallback, not cached
+  assert.strictEqual(await v._decimals("0xUSDC"), 6); // retried, real value
+  assert.strictEqual(calls, 2);
+});

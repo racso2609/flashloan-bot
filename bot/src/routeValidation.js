@@ -36,17 +36,4 @@ function bestRouteExcludingVenue(routes, excludeVenue) {
   return best;
 }
 
-/**
- * True when a round-trip uses the same known venue on both legs.
- *
- * Only meaningful when both venues are known: two unknown venues are NOT the
- * same venue. Compares by value (not truthiness) so "" / 0 are handled
- * consistently.
- */
-function isSameVenueRoundTrip(buyVenue, sellVenue) {
-  if (buyVenue === undefined || buyVenue === null) return false;
-  if (sellVenue === undefined || sellVenue === null) return false;
-  return String(buyVenue) === String(sellVenue);
-}
-
-module.exports = { bestRouteExcludingVenue, isSameVenueRoundTrip };
+module.exports = { bestRouteExcludingVenue };

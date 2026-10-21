@@ -145,7 +145,7 @@ class PriceOracle {
         const amountInStr = amountIn.toString();
         price =
           (parseFloat(amountOutStr) / parseFloat(amountInStr)) *
-          Math.pow(10, tokenInDecimals - tokenOutDecimals);
+          Math.pow(10, Number(tokenInDecimals) - Number(tokenOutDecimals));
       } catch (e) {
         // Price calculation failed, but we still have amountOut
       }

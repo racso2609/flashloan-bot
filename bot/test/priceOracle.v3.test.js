@@ -141,3 +141,32 @@ test("V2 quote passes through when the pool is liquid", async () => {
     "liquid pool must yield a quote",
   );
 });
+
+test("V2 quote returns a non-zero price with BigInt decimals", async () => {
+  // Same BigInt-decimals bug as V3, but on the V2 path: `10 ** tokenInDecimals`
+  // used to throw and be swallowed, leaving price at 0. Pin the fix.
+  const oracle = makeOracle(0n, 6n, 6n);
+  oracle.routers = {
+    SUSHISWAP: {
+      getAmountsOut: {
+        staticCall: async () => [10000n * 10n ** 6n, 9999n * 10n ** 6n],
+      },
+    },
+  };
+  oracle.liquidityValidator = {
+    hasV2Liquidity: async () => true,
+    isV2Tradeable: async () => true,
+  };
+  const r = await oracle.getPriceV2(
+    "SUSHISWAP",
+    "0xIN",
+    "0xOUT",
+    10000n * 10n ** 6n,
+  );
+  assert.strictEqual(r.amountOut, 9999n * 10n ** 6n);
+  assert.ok(
+    Number.isFinite(r.price) && r.price > 0,
+    `price must be > 0, got ${r.price}`,
+  );
+  assert.ok(r.price > 0.99 && r.price < 1.01, `price ~1, got ${r.price}`);
+});
