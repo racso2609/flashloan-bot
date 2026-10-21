@@ -34,9 +34,10 @@ jobs:
       - name: Run Forge build
         run: forge build --sizes
 
-      # The fork suites (ForkArbitrageTest) need a live RPC endpoint and are not
-      # part of push/PR CI. FlashloanTest runs its whole suite against mocks when
-      # SKIP_FORK=true, so the job stays hermetic and deterministic.
+      # The fork suites (ForkArbitrageTest) need a live RPC endpoint and are out of
+      # scope for push/PR CI. FlashloanTest runs against mocks when SKIP_FORK=true,
+      # except the four fork-only cases, which vm.skip() reports as skipped rather
+      # than passing. Real coverage here: 8 passed + 4 skipped + 2 Counter tests.
       - name: Run unit tests (no RPC required)
         run: SKIP_FORK=true forge test --no-match-contract ForkArbitrage
 

@@ -54,12 +54,12 @@ forge test --fork-url $MAINNET_RPC_URL -vvv
 ## Project Structure
 
 ```
-flashloan-bot/
+contracts/                 # Foundry project (this directory)
 ├── src/                 # Source contracts
 │   └── Flashloan.sol     # Main flashloan contract
 ├── test/                # Test files
 │   └── Flashloan.t.sol  # Comprehensive tests
-├── lib/                 # Dependencies
+├── lib/                 # Dependencies (git submodules)
 │   ├── aave-v3-origin  # Aave V3 interfaces
 │   ├── openzeppelin-contracts/
 │   └── forge-std/
