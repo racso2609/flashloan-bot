@@ -1,22 +1,6 @@
-# Environment
+node_modules
 .env
-
-# Build artifacts
-out/
-broadcast/
-cache/
-logs/
-node_modules/
-
-# Foundry dependencies (reproducible via foundry.lock)
-contracts/lib/
-
-# IDE
-.idea/
-.vscode/
-*.swp
-*.swo
-
-# OS
+logs
 .DS_Store
-Thumbs.db
+.next
+out

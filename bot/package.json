@@ -19,8 +19,9 @@
     "pm2:kill": "pm2 kill"
   },
   "dependencies": {
+    "dotenv": "^16.3.1",
     "ethers": "^6.9.0",
-    "dotenv": "^16.3.1"
+    "pg": "^8.23.1"
   },
   "devDependencies": {
     "pm2": "^5.3.0",

@@ -9,6 +9,7 @@ const SmartArbitrageFinder = require("./smartFinder");
 
 // Global config reference (set in constructor)
 let config;
+try { require('./db'); } catch(e) { /* ignore */ }
 
 // Logger utility (lazy-loads config)
 const logger = {
@@ -243,6 +244,8 @@ class FlashloanBot {
       logger.warn("⚠️ Low ETH balance! Fund your wallet to pay for gas.");
     }
 
+    try { const d = require('./db'); if (d.init) await d.init(); } catch (e) {}
+
     this.isRunning = true;
     this.startTime = Date.now();
     this._scanning = false;
@@ -385,6 +388,27 @@ class FlashloanBot {
       // Show top 3
       logger.opportunity(opp);
     }
+
+    // Log opportunities to DB
+    try {
+      const db = require('./db');
+      for (const opp of opportunities.slice(0, 10)) {
+        await db.logOpportunity(opp, {
+          chain: config.CHAIN_NAME || config.CHAIN,
+          mode: config.SETTINGS.DRY_RUN ? 'dryrun' : 'live',
+          simulated: true,
+          executed: false,
+        });
+      }
+      if (!config.SETTINGS.DRY_RUN && opportunities.length > 0) {
+        await db.logOpportunity(opportunities[0], {
+          chain: config.CHAIN_NAME || config.CHAIN,
+          mode: 'live',
+          simulated: true,
+          executed: true,
+        });
+      }
+    } catch (e) {}
 
     // Execute the best one if not in dry run
     if (!config.SETTINGS.DRY_RUN && opportunities.length > 0) {

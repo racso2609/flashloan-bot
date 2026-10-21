@@ -87,3 +87,9 @@ DRY_RUN=true npm start base
 ## ⚠️ Disclaimer
 
 This is for educational purposes. Flashloan arbitrage is highly competitive. Use at your own risk.
+
+## Metrics DB & Dashboard
+
+- Start DB: `docker compose up -d` (Postgres on 5432)
+- Bot auto-logs feasible opportunities to Postgres (mode dryrun/live, simulated gains for dryrun)
+- Dashboard: `cd dashboard && npm install && npm run dev` → http://localhost:3000
