@@ -62,13 +62,18 @@ contracts/                 # Foundry project (own src/, test/, foundry.toml)
 │   └── ForkArbitrage.t.sol  # RPC-backed fork tests (not run in push/PR CI)
 ├── script/              # Deployment scripts
 ├── lib/                 # Dependencies (git submodules, pinned in foundry.lock)
-│   ├── aave-v3-origin  # Aave V3 interfaces
+│   ├── aave-v3-origin  # Aave V3 interfaces (has its own nested lib/, e.g. solidity-utils)
 │   ├── openzeppelin-contracts/
 │   └── forge-std/
 ├── foundry.lock         # Submodule revisions (source of truth for CI)
 ├── remappings.txt       # Import aliases
 └── foundry.toml         # Foundry config
 ```
+
+After a fresh clone the `lib/` entries are **empty gitlinks** until dependencies are
+fetched. Run `forge install` (or `git submodule update --init --recursive`) once before
+building, and use `forge build --locked` / `forge test --locked` so `foundry.lock` is
+actually enforced — a plain `forge build` silently accepts a drifted lockfile.
 
 At the repository root, alongside `contracts/`: `bot/` (the runtime bot, tested by the
 `Bot tests` CI job), `dashboard/`, `deploy/` and `.github/workflows/`.

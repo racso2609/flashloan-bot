@@ -36,7 +36,7 @@ jobs:
         run: forge fmt --check
 
       - name: Run Forge build
-        run: forge build --sizes
+        run: forge build --sizes --locked
 
       # The fork suites (ForkArbitrageTest) need a live RPC endpoint and are out of
       # scope for push/PR CI, as are the four fork-only cases in FlashloanTest.
