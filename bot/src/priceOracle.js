@@ -134,10 +134,14 @@ class PriceOracle {
       
       const tokenInDecimals = await this.getTokenDecimals(tokenIn);
       const tokenOutDecimals = await this.getTokenDecimals(tokenOut);
-      
-      const price = Number(amountOut) / Number(amountIn) * 
-        (10 ** tokenInDecimals) / (10 ** tokenOutDecimals);
-      
+
+      // getTokenDecimals returns a BigInt (from ethers). `10 ** BigInt` throws
+      // "Cannot mix BigInt and other types", which the catch below would swallow
+      // into a silent 0n — i.e. every V3 quote would look empty. Convert first.
+      const price =
+        (Number(amountOut) / Number(amountIn)) *
+        Math.pow(10, Number(tokenInDecimals) - Number(tokenOutDecimals));
+
       return { amountOut, price };
     } catch (error) {
       return { amountOut: 0n, price: 0 };

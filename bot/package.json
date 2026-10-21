@@ -7,7 +7,7 @@
     "start": "node index.js",
     "dry-run": "DRY_RUN=true node index.js",
     "dev": "LOG_LEVEL=debug DRY_RUN=true node index.js",
-    "test": "node test.js",
+    "test": "node --test test/",
     "lint": "echo 'No linter configured'",
     "pm2:start": "pm2 start ./ecosystem.config.js",
     "pm2:start:prod": "pm2 start ./ecosystem.config.js --env production",

@@ -2,6 +2,7 @@
 const { ethers } = require("ethers");
 const config = require("../config/config");
 const PriceAggregator = require("./priceAggregator");
+const { filterOutlierQuotes, isSameVenueRoundTrip } = require("./routeValidation");
 
 class SmartArbitrageFinder {
   constructor(provider, priceOracle, chainConfig) {
@@ -135,14 +136,20 @@ class SmartArbitrageFinder {
       }
     }
 
+    // Drop routes whose quote is a gross outlier vs. the consensus. A V3
+    // quoter may return a plausible-but-fake amount for a pool with no
+    // initialized liquidity; keeping it inflates the spread with phantom
+    // edges (see routeValidation.js).
+    const validRoutes = filterOutlierQuotes(routes);
+
     // Sort by amountOut (best first)
-    routes.sort((a, b) => {
+    validRoutes.sort((a, b) => {
       if (a.amountOut > b.amountOut) return -1;
       if (a.amountOut < b.amountOut) return 1;
       return 0;
     });
 
-    return routes;
+    return validRoutes;
   }
 
   /**
@@ -167,6 +174,9 @@ class SmartArbitrageFinder {
     if (sellRoutes.length < 2) return null;
 
     const bestSell = sellRoutes[0];
+
+    // Same-venue round-trip is never an arbitrage (only fees).
+    if (isSameVenueRoundTrip(bestBuy.dex, bestSell.dex)) return null;
 
     // Calculate profit
     const finalAmount = bestSell.amountOut;
@@ -234,6 +244,10 @@ class SmartArbitrageFinder {
         if (routesBA.length === 0) continue;
 
         const bestBA = routesBA[0];
+
+        // A round-trip through the same pool only pays the fee twice — never
+        // an arbitrage. Skip it so it is not reported as an opportunity.
+        if (isSameVenueRoundTrip(bestAB.dex, bestBA.dex)) continue;
 
         // Round-trip profit: sell on the best B → A route
         const finalAmount = bestBA.amountOut;
@@ -385,10 +399,17 @@ class SmartArbitrageFinder {
       const premium = (amountIn * 5n) / 10000n; // 0.05% flashloan fee
       const netProfit = profit - premium;
 
+      // A cycle where every leg routes through the same venue cannot beat its
+      // own fees — treat it as no opportunity rather than a phantom one.
+      const dex1 = routesAB[0].dex;
+      const dex2 = routesBC[0].dex;
+      const dex3 = routesCA[0].dex;
+      if (dex1 === dex2 && dex2 === dex3) return null;
+
       return {
-        dex1: routesAB[0].dex,
-        dex2: routesBC[0].dex,
-        dex3: routesCA[0].dex,
+        dex1,
+        dex2,
+        dex3,
         finalAmount,
         profit,
         netProfit,
