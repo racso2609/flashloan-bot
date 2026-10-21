@@ -10,6 +10,74 @@ class SmartArbitrageFinder {
     this.aggregator = new PriceAggregator(provider);
     // Use passed config or default (chain-specific tokens will be used)
     this.chainConfig = chainConfig || config;
+    // Native-token cost of a full flashloan round-trip. Set per scan.
+    this.gasCostNative = 0n;
+  }
+
+  /**
+   * Estimate gas cost of executing an arbitration in native token (WETH) wei.
+   * Uses a conservative gas figure covering loan() + 2 swaps + Aave callback.
+   */
+  async estimateGasCost(gasPrice, nativeToken) {
+    if (!gasPrice || gasPrice <= 0n) return 0n;
+
+    // Fallback constant (loan + 2 swaps + flashloan overhead)
+    let gasUnits = BigInt(process.env.EXEC_GAS_UNITS || "600000");
+
+    // Try on-chain estimate against the deployed contract for accuracy
+    try {
+      if (this.flashloanContract) {
+        const estimated = await this.flashloanContract.loan.estimateGas(
+          this.chainConfig?.tokens?.USDC,
+          BigInt(this.chainConfig?.SETTINGS?.DEFAULT_FLASHLOAN || "1000000000"),
+          "0x",
+        );
+        if (estimated > gasUnits) gasUnits = estimated;
+      }
+    } catch {
+      // No contract / not deployed yet — keep constant
+    }
+
+    return gasUnits * gasPrice;
+  }
+
+  /**
+   * Convert a native-token (WETH) cost into the input-token denomination.
+   * Uses the price oracle route WETH -> tokenIn so net profit is comparable.
+   */
+  async nativeToToken(amountNative, tokenIn) {
+    if (amountNative === 0n || !tokenIn) return 0n;
+    const WETH = this.TOKENS.WETH;
+    if (!WETH) return 0n;
+    if (WETH.toLowerCase() === tokenIn.toLowerCase()) return amountNative;
+
+    const routes = await this.findBestRoute(WETH, tokenIn, amountNative);
+    if (routes.length === 0) return 0n;
+    return routes[0].amountOut;
+  }
+
+  /**
+   * Attach gas cost (denominated in the opportunity input token) to an
+   * opportunity and recompute netProfit / isProfitable accordingly.
+   */
+  async applyGasCost(opp) {
+    if (this.gasCostNative === 0n || !opp) return opp;
+
+    const tokenIn = opp.tokenIn || opp.token || this.TOKENS.USDC;
+    const gasCostToken = await this.nativeToToken(this.gasCostNative, tokenIn);
+
+    const profit =
+      opp.profit !== undefined && opp.profit !== null ? BigInt(opp.profit) : null;
+    const premium = BigInt(opp.premium || 0);
+    const netProfit = (profit !== null ? profit : 0n) - premium - gasCostToken;
+
+    return {
+      ...opp,
+      gasCost: gasCostToken,
+      gasCostNative: this.gasCostNative,
+      netProfit,
+      isProfitable: netProfit > 0n,
+    };
   }
 
   // Helper to get tokens from chain config
@@ -107,6 +175,7 @@ class SmartArbitrageFinder {
     const netProfit = profit - premium;
 
     return {
+      tokenIn: WETH,
       tokenOut,
       buyDex: bestBuy.dex,
       sellDex: bestSell.dex,
@@ -150,31 +219,24 @@ class SmartArbitrageFinder {
           tokenB.address,
           flashloanAmount,
         );
-        // Find all routes B → A
+        if (routesAB.length === 0) continue;
+
+        // Best route A → B
+        const bestAB = routesAB[0];
+
+        // Find the best route B → A priced on the amount we actually hold
+        // after the first swap (not the original flashloan amount).
         const routesBA = await this.findBestRoute(
           tokenB.address,
           tokenA.address,
-          flashloanAmount,
+          bestAB.amountOut,
         );
+        if (routesBA.length === 0) continue;
 
-        if (routesAB.length === 0 || routesBA.length === 0) continue;
-
-        // Best route A → B, then B → A
-        const bestAB = routesAB[0];
         const bestBA = routesBA[0];
 
-        // Calculate round-trip profit
-        const afterFirstSwap = bestAB.amountOut;
-        const afterSecondSwap = await this.priceOracle.getPriceV2(
-          bestBA.dex.replace("UNISWAP_V3_", ""),
-          tokenB.address,
-          tokenA.address,
-          afterFirstSwap,
-        );
-
-        if (afterSecondSwap.amountOut === 0n) continue;
-
-        const finalAmount = afterSecondSwap.amountOut;
+        // Round-trip profit: sell on the best B → A route
+        const finalAmount = bestBA.amountOut;
         const profit = finalAmount - flashloanAmount;
         const premium = (flashloanAmount * 5n) / 10000n;
         const netProfit = profit - premium;
@@ -186,6 +248,8 @@ class SmartArbitrageFinder {
           tokenOut: tokenB.address,
           buyDex: bestAB.dex,
           sellDex: bestBA.dex,
+          buyAmount: bestAB.amountOut,
+          sellAmount: bestBA.amountOut,
           flashloanAmount,
           finalAmount,
           profit,
@@ -356,7 +420,15 @@ class SmartArbitrageFinder {
   /**
    * Scan for ALL opportunities
    */
-  async scanForOpportunities(flashloanAmount) {
+  async scanForOpportunities(flashloanAmount, opts = {}) {
+    // Compute gas cost once for the whole scan
+    if (opts.gasPrice) {
+      this.gasCostNative = await this.estimateGasCost(
+        BigInt(opts.gasPrice),
+        opts.nativeToken || this.TOKENS.WETH,
+      );
+    }
+
     const opportunities = [];
 
     // 1. Multi-DEX aggregator (finds best routes across DEXes)
@@ -412,18 +484,23 @@ class SmartArbitrageFinder {
       const key = `${opp.tokenIn || opp.tokenOut}-${opp.direction || ""}`;
       if (!seen.has(key)) {
         seen.add(key);
-        uniqueOpps.push(opp);
+        // Discount gas from net profit before final filtering
+        const withGas = await this.applyGasCost(opp);
+        uniqueOpps.push(withGas);
       }
     }
 
+    // Keep only net-profitable opportunities
+    const profitable = uniqueOpps.filter((opp) => opp.isProfitable);
+
     // Sort by net profit
-    uniqueOpps.sort((a, b) => {
+    profitable.sort((a, b) => {
       if (a.netProfit > b.netProfit) return -1;
       if (a.netProfit < b.netProfit) return 1;
       return 0;
     });
 
-    return uniqueOpps;
+    return profitable;
   }
 }
 

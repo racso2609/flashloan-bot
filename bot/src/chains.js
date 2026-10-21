@@ -34,6 +34,7 @@ const chains = {
     name: 'Arbitrum One',
     chainId: 42161,
     rpcEnv: 'ARBITRUM_RPC_URL',
+    wssEnv: 'ARBITRUM_WSS_URL',
     defaultRpc: 'https://arb1.arbitrum.io/rpc',
     explorer: 'https://arbiscan.io',
     
@@ -83,6 +84,7 @@ const chains = {
     name: 'Base',
     chainId: 8453,
     rpcEnv: 'BASE_RPC_URL',
+    wssEnv: 'BASE_WSS_URL',
     defaultRpc: 'https://mainnet.base.org',
     explorer: 'https://basescan.org',
     
@@ -152,6 +154,7 @@ function getBotConfig(chainName, overrides = {}) {
     
     // RPC
     RPC_URL: process.env[chain.rpcEnv] || chain.defaultRpc,
+    WSS_URL: (chain.wssEnv && process.env[chain.wssEnv]) || null,
     
     // Wallet
     PRIVATE_KEY: process.env.PRIVATE_KEY,

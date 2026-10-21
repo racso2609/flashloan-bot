@@ -18,6 +18,9 @@ const config = {
   // RPC endpoint
   RPC_URL: process.env[chain.rpcEnv] || chain.defaultRpc,
   
+  // WebSocket endpoint (optional, preferred for block subscriptions)
+  WSS_URL: (chain.wssEnv && process.env[chain.wssEnv]) || null,
+  
   // Private key
   PRIVATE_KEY: process.env.PRIVATE_KEY || '0xYOUR_PRIVATE_KEY',
   

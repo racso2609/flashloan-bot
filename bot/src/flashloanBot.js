@@ -157,11 +157,29 @@ class FlashloanBot {
 
     // Get RPC URL (from env or use default)
     const rpcUrl = process.env[config.rpcEnv] || config.defaultRpc;
-    
-    // Initialize provider
-    this.provider = new ethers.JsonRpcProvider(rpcUrl);
+    const wssUrl = (config.wssEnv && process.env[config.wssEnv]) || null;
 
-    // Initialize wallet
+    // Alchemy apps with an origin allowlist reject requests that carry no
+    // Origin header. Send one explicitly so server-side bots authenticate.
+    const origin = process.env.RPC_ORIGIN || "http://localhost";
+    const fetchOptions = { headers: { Origin: origin } };
+
+    // HTTP provider for reads/simulations (staticCall, estimateGas)
+    this.provider = new ethers.JsonRpcProvider(
+      rpcUrl,
+      undefined,
+      { staticNetwork: true, fetchOptions },
+    );
+
+    // Optional WebSocket provider for block subscriptions (lower latency,
+    // fewer HTTP polls). Only used if a WSS URL is configured.
+    this.wssProvider = wssUrl
+      ? new ethers.WebSocketProvider(wssUrl, undefined, {
+          headers: { Origin: origin },
+        })
+      : null;
+
+    // Initialize wallet (bound to HTTP provider for writes)
     this.wallet = new ethers.Wallet(privateKey, this.provider);
 
     // Store contract address for later use
@@ -182,6 +200,8 @@ class FlashloanBot {
       this.priceOracle,
       config, // Pass chain config
     );
+    // Allow smartFinder to refine its gas estimate against the contract
+    this.smartFinder.flashloanContract = this.flashloanContract;
 
     // State
     this.isRunning = false;
@@ -206,7 +226,10 @@ class FlashloanBot {
     );
     console.log(`  Min Profit: $${config.SETTINGS.MIN_PROFIT_USD}`);
     console.log(`  Max Gas:    ${config.SETTINGS.MAX_GAS_PRICE_GWEI} Gwei`);
-    console.log(`  Poll:       ${config.SETTINGS.POLL_INTERVAL_MS}ms`);
+    console.log(
+      `  Trigger:    ${this.wssProvider ? "WebSocket (block listener)" : `Polling (${config.SETTINGS.POLL_INTERVAL_MS}ms)`}`,
+    );
+    console.log(`  Slippage:   ${config.SETTINGS.SLIPPAGE_BPS} bps`);
     console.log("─".repeat(60));
 
     // Check wallet
@@ -222,8 +245,65 @@ class FlashloanBot {
 
     this.isRunning = true;
     this.startTime = Date.now();
+    this._scanning = false;
 
-    // Main loop
+    if (this.wssProvider) {
+      await this.runBlockListener();
+    } else {
+      await this.runPollLoop();
+    }
+  }
+
+  /**
+   * Block-driven loop using a WebSocket subscription. Preferred on L2s where
+   * blocks are frequent (~250ms on Arbitrum) and polling burns RPC quota.
+   */
+  async runBlockListener() {
+    logger.info("🔌 Listening for blocks via WebSocket...");
+
+    return new Promise((resolve) => {
+      const onBlock = async () => {
+        if (!this.isRunning) return;
+        if (this._scanning) return; // skip if previous scan still running
+        this._scanning = true;
+        try {
+          await this.scanAndExecute();
+          this.scansCompleted++;
+          if (this.scansCompleted % 100 === 0) this.printStats();
+        } catch (error) {
+          logger.error("Scan error:", error.message);
+        } finally {
+          this._scanning = false;
+        }
+      };
+
+      this.wssProvider.on("block", onBlock);
+
+      const stop = async () => {
+        this.isRunning = false;
+        try {
+          this.wssProvider.off("block", onBlock);
+          await this.wssProvider.destroy();
+        } catch {
+          // ignore teardown errors
+        }
+        resolve();
+      };
+
+      // Resolve when stopped via stop()
+      const check = setInterval(() => {
+        if (!this.isRunning) {
+          clearInterval(check);
+          stop();
+        }
+      }, 1000);
+    });
+  }
+
+  /**
+   * Fallback HTTP polling loop (used when no WSS URL is configured).
+   */
+  async runPollLoop() {
     while (this.isRunning) {
       try {
         await this.scanAndExecute();
@@ -249,7 +329,6 @@ class FlashloanBot {
     this.printStats();
     logger.info("Bot stopped");
   }
-
   /**
    * Scan for opportunities and execute if profitable
    */
@@ -269,9 +348,12 @@ class FlashloanBot {
     // Get flashloan amount
     const flashloanAmount = BigInt(config.SETTINGS.DEFAULT_FLASHLOAN);
 
-    // Scan for opportunities
+    // Scan for opportunities (gas cost applied to net profit)
     const smartOpps =
-      await this.smartFinder.scanForOpportunities(flashloanAmount);
+      await this.smartFinder.scanForOpportunities(flashloanAmount, {
+        gasPrice,
+        nativeToken: config.TOKENS.WETH,
+      });
 
     console.log(
       `Scanned for opportunities with flashloan amount: ${formatAmount(flashloanAmount)} `,
@@ -313,14 +395,78 @@ class FlashloanBot {
   }
 
   /**
+   * Map a smartFinder DEX label to contract params (router + dexType + fee).
+   */
+  resolveDex(dexLabel) {
+    if (!dexLabel) return null;
+    const dexes = config.DEX_ROUTERS || {};
+
+    // Uniswap V3 tiers are labelled UNISWAP_V3_<fee>
+    if (typeof dexLabel === "string" && dexLabel.startsWith("UNISWAP_V3_")) {
+      const fee = parseInt(dexLabel.replace("UNISWAP_V3_", ""), 10) || 3000;
+      const router = dexes.UNISWAP_V3 || dexes.UNISWAP_V3_SWAP_ROUTER;
+      if (!router) return null;
+      return { router, dexType: 1, fee };
+    }
+
+    const router = dexes[dexLabel];
+    if (!router) return null;
+    return { router, dexType: 0, fee: 0 };
+  }
+
+  /**
+   * Build contract arbitrage params from a smartFinder opportunity, applying
+   * slippage protection to each leg's expected output.
+   */
+  buildContractParams(opportunity) {
+    const slippageBps = BigInt(config.SETTINGS.SLIPPAGE_BPS || 50);
+    const minOut = (expected) =>
+      (BigInt(expected) * (10000n - slippageBps)) / 10000n;
+
+    const tokenIn = opportunity.tokenIn || config.TOKENS.USDC;
+    const buy = this.resolveDex(opportunity.buyDex);
+    const sell = this.resolveDex(opportunity.sellDex);
+
+    if (!buy || !sell) {
+      throw new Error(
+        `Unsupported DEX pair: buy=${opportunity.buyDex} sell=${opportunity.sellDex}`,
+      );
+    }
+
+    // Middle token sits between the two legs
+    const middle =
+      opportunity.tokenOut || opportunity.intermediate1 || config.TOKENS.WETH;
+
+    return {
+      leg1: {
+        dexType: buy.dexType,
+        router: buy.router,
+        path: [tokenIn, middle],
+        fee: buy.fee,
+        amountOutMin: opportunity.buyAmount ? minOut(opportunity.buyAmount) : 0n,
+      },
+      leg2: {
+        dexType: sell.dexType,
+        router: sell.router,
+        path: [middle, tokenIn],
+        fee: sell.fee,
+        amountOutMin: opportunity.sellAmount
+          ? minOut(opportunity.sellAmount)
+          : 0n,
+      },
+      profitRecipient: this.wallet.address,
+    };
+  }
+
+  /**
    * Execute an arbitrage trade
    */
   async executeArbitrage(opportunity, gasPrice) {
     logger.warn("🚀 EXECUTING ARBITRAGE...");
 
     try {
-      // Build params
-      const arbParams = this.arbitrageFinder.buildArbitrageParams(opportunity);
+      // Build params with slippage protection
+      const arbParams = this.buildContractParams(opportunity);
 
       const params = ethers.AbiCoder.defaultAbiCoder().encode(
         [
@@ -330,28 +476,41 @@ class FlashloanBot {
           {
             leg1: arbParams.leg1,
             leg2: arbParams.leg2,
-            profitRecipient: this.wallet.address,
+            profitRecipient: arbParams.profitRecipient,
           },
         ],
       );
 
+      const asset = opportunity.tokenIn || config.TOKENS.USDC;
+      const amount =
+        opportunity.initialAmount ||
+        opportunity.flashloanAmount ||
+        BigInt(config.SETTINGS.DEFAULT_FLASHLOAN);
+
+      // SIMULATION (mandatory): run the call on-chain without spending gas.
+      // If this reverts, the trade would revert on-chain — abort.
+      try {
+        await this.flashloanContract.loan.staticCall(asset, amount, params);
+        logger.info("✅ Simulation passed");
+      } catch (simError) {
+        logger.warn(
+          `⛔ Simulation failed, aborting trigger: ${simError.shortMessage || simError.message}`,
+        );
+        return;
+      }
+
       // Estimate gas
       const gasEstimate = await this.flashloanContract.loan.estimateGas(
-        opportunity.tokenIn || config.TOKENS.USDC,
-        opportunity.initialAmount || BigInt(config.SETTINGS.DEFAULT_FLASHLOAN),
+        asset,
+        amount,
         params,
       );
 
       // Execute
-      const tx = await this.flashloanContract.loan(
-        opportunity.tokenIn || config.TOKENS.USDC,
-        opportunity.initialAmount || BigInt(config.SETTINGS.DEFAULT_FLASHLOAN),
-        params,
-        {
-          gasLimit: (gasEstimate * 120n) / 100n,
-          gasPrice: gasPrice,
-        },
-      );
+      const tx = await this.flashloanContract.loan(asset, amount, params, {
+        gasLimit: (gasEstimate * 120n) / 100n,
+        gasPrice: gasPrice,
+      });
 
       logger.warn(`📤 TX Sent: ${tx.hash}`);
 
