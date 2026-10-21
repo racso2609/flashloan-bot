@@ -211,6 +211,14 @@ class LiquidityValidator {
    * Human spot price (tokenOut per tokenIn) from a V3 pool's slot0.
    * Returns null when it cannot be derived; callers treat null as fail-closed.
    */
+  /**
+   * Human spot price (tokenOut per tokenIn) from a V3 pool's slot0.
+   *
+   * @returns {number|null|undefined} `undefined` when the pool's own tokens do
+   *   NOT match the directed pair {tokenIn, tokenOut} (pool belongs to another
+   *   pair — callers must fail closed); `null` when the spot cannot be derived
+   *   from the pool state; otherwise the positive finite spot price.
+   */
   async _v3SpotPrice(poolContract, tokenIn, tokenOut) {
     try {
       const slot0 = await poolContract.slot0();

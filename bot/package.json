@@ -1,6 +1,7 @@
 {
   "name": "flashloan-arbitrage-bot",
   "version": "1.0.0",
+  "packageManager": "pnpm@9.15.9",
   "description": "Off-chain bot for flashloan arbitrage opportunities on Arbitrum",
   "main": "index.js",
   "scripts": {
