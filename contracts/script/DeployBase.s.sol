@@ -6,14 +6,14 @@ import "../src/Flashloan.sol";
 
 /**
  * Deployment script for Flashloan contract on Base
- * 
+ *
  * Usage:
  *   FOUNDRY_PROFILE=script forge script script/DeployBase.s.sol:DeployBaseScript \
  *     --rpc-url $BASE_RPC_URL \
  *     --private-key $PRIVATE_KEY \
  *     --broadcast \
  *     -vvvv
- * 
+ *
  * Verify on Basescan:
  *   FOUNDRY_PROFILE=script forge script script/DeployBase.s.sol:DeployBaseScript \
  *     --rpc-url $BASE_RPC_URL \
@@ -31,7 +31,7 @@ contract DeployBaseScript is Script {
     function run() external returns (Flashloan) {
         // Get deployer from environment
         address deployer = vm.addr(vm.envUint("PRIVATE_KEY"));
-        
+
         console.log("=================================");
         console.log("Flashloan Contract Deployment");
         console.log("=================================");
@@ -49,7 +49,7 @@ contract DeployBaseScript is Script {
         Flashloan flashloan = new Flashloan(
             AAVE_V3_POOL,
             AAVE_V3_PROVIDER,
-            deployer  // initialOwner
+            deployer // initialOwner
         );
 
         vm.stopBroadcast();

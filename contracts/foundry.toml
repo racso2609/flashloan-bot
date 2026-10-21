@@ -12,7 +12,9 @@ via_ir = true
 # arbitrum_one = "https://arb1.arbitrum.io/rpc"
 
 [profile.test]
-fuzz_runs = 256
+
+[profile.test.fuzz]
+runs = 256
 
 # Script configuration
 [profile.script]
