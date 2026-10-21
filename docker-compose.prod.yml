@@ -1,0 +1,67 @@
+version: '3.8'
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: flashloan-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: flashloan
+      POSTGRES_PASSWORD: flashloan
+      POSTGRES_DB: flashloan_metrics
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U flashloan"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  bot:
+    build:
+      context: ./bot
+      dockerfile: Dockerfile
+    container_name: flashloan-bot
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      - CHAIN=${CHAIN:-arbitrum}
+      - DATABASE_URL=postgres://flashloan:flashloan@postgres:5432/flashloan_metrics
+      - ARBITRUM_RPC_URL=${ARBITRUM_RPC_URL}
+      - BASE_RPC_URL=${BASE_RPC_URL}
+      - ARBITRUM_WSS_URL=${ARBITRUM_WSS_URL}
+      - BASE_WSS_URL=${BASE_WSS_URL}
+      - PRIVATE_KEY=${PRIVATE_KEY}
+      - FLASHLOAN_CONTRACT=${FLASHLOAN_CONTRACT}
+      - MIN_PROFIT_USD=${MIN_PROFIT_USD:-10}
+      - MAX_GAS_PRICE_GWEI=${MAX_GAS_PRICE_GWEI:-50}
+      - FLASHLOAN_AMOUNT=${FLASHLOAN_AMOUNT:-1000000000}
+      - POLL_INTERVAL_MS=${POLL_INTERVAL_MS:-3000}
+      - DRY_RUN=${DRY_RUN:-true}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - EXEC_GAS_UNITS=${EXEC_GAS_UNITS:-600000}
+    volumes:
+      - ./bot/logs:/app/logs
+    command: ["node", "src/index.js", "${CHAIN:-arbitrum}"]
+
+  dashboard:
+    build:
+      context: ./dashboard
+      dockerfile: Dockerfile
+    container_name: flashloan-dashboard
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    environment:
+      - DATABASE_URL=postgres://flashloan:flashloan@postgres:5432/flashloan_metrics
+    command: ["npm", "start"]
+
+volumes:
+  postgres_data:

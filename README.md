@@ -93,3 +93,10 @@ This is for educational purposes. Flashloan arbitrage is highly competitive. Use
 - Start DB: `docker compose up -d` (Postgres on 5432)
 - Bot auto-logs feasible opportunities to Postgres (mode dryrun/live, simulated gains for dryrun)
 - Dashboard: `cd dashboard && npm install && npm run dev` → http://localhost:3000
+
+## Full Stack (Docker)
+
+- Copy `.env.prod.example` → `.env` and fill keys/RPC/contract
+- `docker compose -f docker-compose.prod.yml up -d --build`
+- Dashboard: http://localhost:3000, DB: 5432, Bot logs in `bot/logs/`
+- Stop: `docker compose -f docker-compose.prod.yml down`
