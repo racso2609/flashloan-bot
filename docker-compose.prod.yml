@@ -1,4 +1,3 @@
-version: '3.8'
 services:
   postgres:
     image: postgres:15-alpine
@@ -8,8 +7,11 @@ services:
       POSTGRES_USER: flashloan
       POSTGRES_PASSWORD: flashloan
       POSTGRES_DB: flashloan_metrics
-    ports:
-      - "5432:5432"
+    # SECURITY: no host port published. Bot + dashboard reach it over the
+    # internal compose network as `postgres:5432`. Re-add only if you truly
+    # need external access, and bind it to 127.0.0.1 then.
+    expose:
+      - "5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -57,11 +59,17 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    # SECURITY: bound to loopback only. Reachable via Tailscale serve
+    # (tailscale serve --https=9447 3000), never from the LAN/internet.
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     environment:
       - DATABASE_URL=postgres://flashloan:flashloan@postgres:5432/flashloan_metrics
-    command: ["npm", "start"]
+      - HOSTNAME=0.0.0.0
+      - PORT=3000
+    # NOTE: no `command` override — the image is a Next.js standalone build
+    # (CMD ["node","server.js"]). `npm start` would need `next` in the runner
+    # image, which the multi-stage Dockerfile does not ship.
 
 volumes:
   postgres_data:
