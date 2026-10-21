@@ -24,6 +24,10 @@ jobs:
 
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
+        with:
+          # Pinned: vm.skip(bool) is a forge cheatcode, not a forge-std helper, so
+          # the job depends on the binary actually supporting it.
+          version: v1.8.6
 
       - name: Show Forge version
         run: forge --version
@@ -35,9 +39,9 @@ jobs:
         run: forge build --sizes
 
       # The fork suites (ForkArbitrageTest) need a live RPC endpoint and are out of
-      # scope for push/PR CI. FlashloanTest runs against mocks when SKIP_FORK=true,
-      # except the four fork-only cases, which vm.skip() reports as skipped rather
-      # than passing. Real coverage here: 8 passed + 4 skipped + 2 Counter tests.
+      # scope for push/PR CI, as are the four fork-only cases in FlashloanTest.
+      # Those four use vm.skip() so they are reported as skipped rather than
+      # silently passing. Run the full suite locally with a fork RPC to cover them.
       - name: Run unit tests (no RPC required)
         run: SKIP_FORK=true forge test --no-match-contract ForkArbitrage
 

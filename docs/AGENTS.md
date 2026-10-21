@@ -54,18 +54,24 @@ forge test --fork-url $MAINNET_RPC_URL -vvv
 ## Project Structure
 
 ```
-contracts/                 # Foundry project (this directory)
+contracts/                 # Foundry project (own src/, test/, foundry.toml)
 ├── src/                 # Source contracts
 │   └── Flashloan.sol     # Main flashloan contract
 ├── test/                # Test files
-│   └── Flashloan.t.sol  # Comprehensive tests
-├── lib/                 # Dependencies (git submodules)
+│   ├── Flashloan.t.sol  # Comprehensive tests (mock + fork-only cases)
+│   └── ForkArbitrage.t.sol  # RPC-backed fork tests (not run in push/PR CI)
+├── script/              # Deployment scripts
+├── lib/                 # Dependencies (git submodules, pinned in foundry.lock)
 │   ├── aave-v3-origin  # Aave V3 interfaces
 │   ├── openzeppelin-contracts/
 │   └── forge-std/
+├── foundry.lock         # Submodule revisions (source of truth for CI)
 ├── remappings.txt       # Import aliases
 └── foundry.toml         # Foundry config
 ```
+
+At the repository root, alongside `contracts/`: `bot/` (the runtime bot, tested by the
+`Bot tests` CI job), `dashboard/`, `deploy/` and `.github/workflows/`.
 
 ---
 
