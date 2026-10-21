@@ -1,0 +1,39 @@
+// Route-level validation helpers.
+//
+// NOTE on scope: pool "is this quote real?" validation lives in
+// liquidityValidator.js, which reads the pool's own on-chain state (factory +
+// liquidity/reserves). That is the authoritative filter. An earlier revision of
+// this file tried to infer realness from the MAGNITUDE of the quote (drop
+// routes far from the median); it was removed because it is unreliable — it
+// keeps inflated phantoms and discards real venues when the majority of quotes
+// for a pair are garbage. Do not reintroduce it.
+//
+// What remains here is purely about route STRUCTURE, independent of amounts.
+
+/**
+ * Best route from `routes` whose venue differs from `excludeVenue`.
+ *
+ * A round-trip that buys and sells on the same pool can only lose the fee twice,
+ * so it is never an arbitrage. But that does NOT mean the opportunity is void:
+ * the second-best venue on the sell side may still produce a cross-venue edge.
+ * Picking the best *cross-venue* leg captures it, instead of aborting outright.
+ *
+ * @returns {object|null} the best compatible route, or null if none exists
+ */
+function bestRouteExcludingVenue(routes, excludeVenue) {
+  if (!Array.isArray(routes) || routes.length === 0) return null;
+  let best = null;
+  for (const r of routes) {
+    if (!r) continue;
+    // Routes without a venue cannot be proven cross-venue; skip them so the
+    // guard stays sound (we never accept a leg we cannot distinguish).
+    if (r.dex === undefined || r.dex === null) continue;
+    if (String(r.dex) === String(excludeVenue)) continue;
+    // Pick the maximum explicitly rather than trusting the caller's ordering:
+    // this must return the BEST cross-venue leg, not merely the first one.
+    if (best === null || r.amountOut > best.amountOut) best = r;
+  }
+  return best;
+}
+
+module.exports = { bestRouteExcludingVenue };
