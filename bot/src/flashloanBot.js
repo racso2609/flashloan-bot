@@ -356,7 +356,7 @@ class FlashloanBot {
       });
 
     console.log(
-      `Scanned for opportunities with flashloan amount: ${formatAmount(flashloanAmount)} `,
+      `Scanned for opportunities with flashloan amount: ${formatAmount(flashloanAmount, getDecimals(config.TOKENS.USDC, config))} `,
       smartOpps,
     );
 
