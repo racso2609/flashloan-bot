@@ -79,7 +79,10 @@ test("V2 quote is rejected when the pool has no liquidity", async () => {
       },
     },
   };
-  oracle.liquidityValidator = { hasV2Liquidity: async () => false };
+  oracle.liquidityValidator = {
+    hasV2Liquidity: async () => false,
+    isV2Tradeable: async () => false,
+  };
   const r = await oracle.getPriceV2(
     "SUSHISWAP",
     "0xIN",
@@ -87,6 +90,30 @@ test("V2 quote is rejected when the pool has no liquidity", async () => {
     10000n * 10n ** 6n,
   );
   assert.strictEqual(r.amountOut, 0n, "illiquid pool must yield no quote");
+});
+
+test("V2 quote is rejected when the pool is too shallow for the trade", async () => {
+  const oracle = makeOracle(0n, 6n, 6n);
+  // Pair exists (hasV2Liquidity true) but the trade has excessive impact
+  // (isV2Tradeable false). Only the impact gate can stop this quote.
+  oracle.routers = {
+    SUSHISWAP: {
+      getAmountsOut: {
+        staticCall: async () => [10000n * 10n ** 6n, 398n * 10n ** 6n],
+      },
+    },
+  };
+  oracle.liquidityValidator = {
+    hasV2Liquidity: async () => true,
+    isV2Tradeable: async () => false,
+  };
+  const r = await oracle.getPriceV2(
+    "SUSHISWAP",
+    "0xIN",
+    "0xOUT",
+    10000n * 10n ** 6n,
+  );
+  assert.strictEqual(r.amountOut, 0n, "excessive impact must yield no quote");
 });
 
 test("V2 quote passes through when the pool is liquid", async () => {
@@ -98,7 +125,10 @@ test("V2 quote passes through when the pool is liquid", async () => {
       },
     },
   };
-  oracle.liquidityValidator = { hasV2Liquidity: async () => true };
+  oracle.liquidityValidator = {
+    hasV2Liquidity: async () => true,
+    isV2Tradeable: async () => true,
+  };
   const r = await oracle.getPriceV2(
     "SUSHISWAP",
     "0xIN",

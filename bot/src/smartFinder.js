@@ -161,7 +161,7 @@ class SmartArbitrageFinder {
 
     // Find best route to buy tokenOut
     const buyRoutes = await this.findBestRoute(WETH, tokenOut, amountIn);
-    if (buyRoutes.length < 2) return null;
+    if (buyRoutes.length === 0) return null;
 
     const bestBuy = buyRoutes[0];
     const worstBuy = buyRoutes[buyRoutes.length - 1];
@@ -172,7 +172,7 @@ class SmartArbitrageFinder {
       WETH,
       bestBuy.amountOut,
     );
-    if (sellRoutes.length < 2) return null;
+    if (sellRoutes.length === 0) return null;
 
     const bestSell = sellRoutes[0];
 

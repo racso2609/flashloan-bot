@@ -22,14 +22,18 @@
  */
 function bestRouteExcludingVenue(routes, excludeVenue) {
   if (!Array.isArray(routes) || routes.length === 0) return null;
+  let best = null;
   for (const r of routes) {
     if (!r) continue;
     // Routes without a venue cannot be proven cross-venue; skip them so the
     // guard stays sound (we never accept a leg we cannot distinguish).
     if (r.dex === undefined || r.dex === null) continue;
-    if (String(r.dex) !== String(excludeVenue)) return r;
+    if (String(r.dex) === String(excludeVenue)) continue;
+    // Pick the maximum explicitly rather than trusting the caller's ordering:
+    // this must return the BEST cross-venue leg, not merely the first one.
+    if (best === null || r.amountOut > best.amountOut) best = r;
   }
-  return null;
+  return best;
 }
 
 /**

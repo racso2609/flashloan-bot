@@ -76,6 +76,22 @@ test("findRouteArbitrage returns null when only a same-venue pair exists", async
   assert.strictEqual(opp, null, "no cross-venue leg -> no opportunity");
 });
 
+test("findRouteArbitrage works with a single buy venue and a cross-venue sell", async () => {
+  // Only ONE venue to buy on, but a better sell exists elsewhere. The old
+  // `buyRoutes.length < 2` guard returned null before even looking.
+  const oracle = stubOracle({
+    "0xWETH>0xUSDC": { SUSHISWAP: 10000 },
+    "0xUSDC>0xWETH": { SUSHISWAP: 9990, CAMELOT: 10080 },
+  });
+  const finder = new SmartArbitrageFinder(null, oracle, chainConfig);
+
+  const opp = await finder.findRouteArbitrage("0xWETH", "0xUSDC", 10000n);
+  assert.ok(opp, "a single-venue buy with a cross-venue sell is a real arb");
+  assert.strictEqual(opp.buyDex, "SUSHISWAP");
+  assert.strictEqual(opp.sellDex, "CAMELOT");
+  assert.ok(opp.netProfit > 0n);
+});
+
 test("findStablecoinArbitrage picks a cross-venue leg when the top venue matches", async () => {
   const oracle = stubOracle({
     "0xUSDC>0xUSDT": { SUSHISWAP: 10050, CAMELOT: 9990 },

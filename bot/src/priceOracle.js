@@ -114,6 +114,27 @@ class PriceOracle {
         return { amountOut: 0n, price: 0 };
       }
 
+      // Depth-for-size check: a V2 pair can hold reserves yet be far too thin
+      // for this trade. Compare the router's effective price against the pair's
+      // spot and reject excessive impact (fail-closed on unverifiable state).
+      if (
+        this.liquidityValidator &&
+        typeof this.liquidityValidator.isV2Tradeable === "function"
+      ) {
+        const decIn = Number(await this.getTokenDecimals(normalizedIn));
+        const decOut = Number(await this.getTokenDecimals(normalizedOut));
+        const tradeable = await this.liquidityValidator.isV2Tradeable(
+          dexName,
+          tokenIn,
+          tokenOut,
+          amountIn,
+          amountOutNum,
+          decIn,
+          decOut,
+        );
+        if (!tradeable) return { amountOut: 0n, price: 0 };
+      }
+
       let price = 0;
       try {
         const tokenInDecimals = await this.getTokenDecimals(normalizedIn);

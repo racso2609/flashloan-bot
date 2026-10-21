@@ -7,6 +7,16 @@ const {
   isSameVenueRoundTrip,
 } = require("../src/routeValidation");
 
+test("bestRouteExcludingVenue picks the best leg regardless of array order", () => {
+  // Unordered input: the maximum cross-venue leg must win, not the first one.
+  const routes = [
+    { dex: "B", amountOut: 90n },
+    { dex: "A", amountOut: 100n },
+    { dex: "C", amountOut: 120n },
+  ];
+  assert.strictEqual(bestRouteExcludingVenue(routes, "A").dex, "C");
+});
+
 test("bestRouteExcludingVenue skips the excluded venue", () => {
   const routes = [
     { dex: "A", amountOut: 100n },
