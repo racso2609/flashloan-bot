@@ -1,47 +1,48 @@
-// Route validation helpers.
+// Route-level validation helpers.
 //
-// Context: a V3 quoter does not always revert for a pool with no liquidity /
-// no initialized ticks — some deployments return a value extrapolated from the
-// current tick, or a near-zero amount for a thin/broken pool. Feeding those into
-// the arbitrage math produces phantom spreads (e.g. ~100%, or billions of bps
-// between a real pool and a broken one), which drowns the real signal.
+// NOTE on scope: pool "is this quote real?" validation lives in
+// liquidityValidator.js, which reads the pool's own on-chain state (factory +
+// liquidity/reserves). That is the authoritative filter. An earlier revision of
+// this file tried to infer realness from the MAGNITUDE of the quote (drop
+// routes far from the median); it was removed because it is unreliable — it
+// keeps inflated phantoms and discards real venues when the majority of quotes
+// for a pair are garbage. Do not reintroduce it.
 //
-// The defence is anchored on the BEST quote, not on the median: for any directed
-// pair the deepest/most-liquid venue is the one that returns the most output,
-// and broken pools return dramatically less (a thin pool gives 31 USDT for 10000
-// USDC). So we keep quotes within a tolerance of the best and drop the rest.
-//
-// This is deliberately one-sided (only drops quotes far BELOW the best): a
-// genuinely better venue is, by definition, the anchor and is never discarded.
-
-const DEFAULT_MAX_DROP_BPS = 2000n; // 20% below the best quote
+// What remains here is purely about route STRUCTURE, independent of amounts.
 
 /**
- * Keep only quotes within `maxDropBps` of the best quote for the pair.
+ * Best route from `routes` whose venue differs from `excludeVenue`.
  *
- * @param {Array<{amountOut: bigint}>} quotes
- * @param {bigint} maxDropBps how far below the best a quote may fall
- * @returns {Array} the surviving quotes (same relative order as input)
+ * A round-trip that buys and sells on the same pool can only lose the fee twice,
+ * so it is never an arbitrage. But that does NOT mean the opportunity is void:
+ * the second-best venue on the sell side may still produce a cross-venue edge.
+ * Picking the best *cross-venue* leg captures it, instead of aborting outright.
+ *
+ * @returns {object|null} the best compatible route, or null if none exists
  */
-function filterOutlierQuotes(quotes, maxDropBps = DEFAULT_MAX_DROP_BPS) {
-  const live = (quotes || []).filter((q) => q && q.amountOut > 0n);
-  if (live.length < 2) return live; // nothing to compare against
-
-  let best = 0n;
-  for (const q of live) if (q.amountOut > best) best = q.amountOut;
-
-  const floor = (best * (10000n - maxDropBps)) / 10000n;
-  return live.filter((q) => q.amountOut >= floor);
+function bestRouteExcludingVenue(routes, excludeVenue) {
+  if (!Array.isArray(routes) || routes.length === 0) return null;
+  for (const r of routes) {
+    if (!r) continue;
+    // Routes without a venue cannot be proven cross-venue; skip them so the
+    // guard stays sound (we never accept a leg we cannot distinguish).
+    if (r.dex === undefined || r.dex === null) continue;
+    if (String(r.dex) !== String(excludeVenue)) return r;
+  }
+  return null;
 }
 
 /**
- * True when a round-trip uses the same venue on both legs. Such a trip can only
- * lose the pool fee, so it is never an arbitrage — used to avoid reporting the
- * "best buy == best sell" degenerate case as an opportunity.
+ * True when a round-trip uses the same known venue on both legs.
+ *
+ * Only meaningful when both venues are known: two unknown venues are NOT the
+ * same venue. Compares by value (not truthiness) so "" / 0 are handled
+ * consistently.
  */
 function isSameVenueRoundTrip(buyVenue, sellVenue) {
-  if (!buyVenue || !sellVenue) return false;
+  if (buyVenue === undefined || buyVenue === null) return false;
+  if (sellVenue === undefined || sellVenue === null) return false;
   return String(buyVenue) === String(sellVenue);
 }
 
-module.exports = { filterOutlierQuotes, isSameVenueRoundTrip, DEFAULT_MAX_DROP_BPS };
+module.exports = { bestRouteExcludingVenue, isSameVenueRoundTrip };

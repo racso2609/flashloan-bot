@@ -49,6 +49,14 @@ const chains = {
       UNISWAP_V3: '0xE592427A0AEce92De3Edee1F18E0157C05861564',
       UNISWAP_V3_QUOTER: '0xb27308f9F90D607463bb33eA1BeBb41C27CE5AB6',
     },
+
+    // Factories used to validate that a pool actually holds liquidity before we
+    // trust its quote (see src/liquidityValidator.js).
+    factories: {
+      UNISWAP_V3: '0x1F98431c8aD98523631AE4a59f267346ea31F984',
+      SUSHISWAP: '0xc35DADB65012eC5796536bD9864eD8773aBc74C4',
+      CAMELOT: '0x6EcCab422D763aC031210895C81787E87B43A652',
+    },
     
     tokens: {
       WETH: '0x82aF49447D8a07e3bd95BD0d56f35241523fBab1',
@@ -167,6 +175,9 @@ function getBotConfig(chainName, overrides = {}) {
     
     // DEX routers
     DEX_ROUTERS: chain.dexes,
+
+    // DEX factories (pool-liquidity validation)
+    DEX_FACTORIES: chain.factories || {},
     
     // Tokens
     TOKENS: chain.tokens,

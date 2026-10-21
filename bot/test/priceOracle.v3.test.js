@@ -21,7 +21,9 @@ function stubProvider() {
 // BigInt (as ethers does), without hitting the network.
 function makeOracle(amountOut, decIn, decOut) {
   const oracle = new PriceOracle(stubProvider(), {
-    DEX_ROUTERS: { UNISWAP_V3_QUOTER: "0xb27308f9F90D607463bb33eA1BeBb41C27CE5AB6" },
+    DEX_ROUTERS: {
+      UNISWAP_V3_QUOTER: "0xb27308f9F90D607463bb33eA1BeBb41C27CE5AB6",
+    },
   });
   // Replace the quoter with a stub returning a fixed amount.
   oracle.v3Quoter = {
@@ -29,8 +31,7 @@ function makeOracle(amountOut, decIn, decOut) {
       staticCall: async () => amountOut,
     },
   };
-  oracle.getTokenDecimals = async (addr) =>
-    addr === "0xIN" ? decIn : decOut;
+  oracle.getTokenDecimals = async (addr) => (addr === "0xIN" ? decIn : decOut);
   return oracle;
 }
 
@@ -58,4 +59,55 @@ test("V3 quote returns 0n on a reverting quoter (unchanged behaviour)", async ()
   };
   const r = await oracle.getPriceV3("0xIN", "0xOUT", 500, 10000n * 10n ** 6n);
   assert.strictEqual(r.amountOut, 0n);
+});
+
+test("V3 quote is rejected when the pool is not tradeable", async () => {
+  const oracle = makeOracle(9998n * 10n ** 6n, 6n, 6n);
+  // Inject a validator that reports the pool as untradeable.
+  oracle.liquidityValidator = { isV3Tradeable: async () => false };
+  const r = await oracle.getPriceV3("0xIN", "0xOUT", 500, 10000n * 10n ** 6n);
+  assert.strictEqual(r.amountOut, 0n, "untradeable pool must yield no quote");
+});
+
+test("V2 quote is rejected when the pool has no liquidity", async () => {
+  const oracle = makeOracle(0n, 6n, 6n);
+  // Router returns a NON-zero quote, so only the liquidity guard can stop it.
+  oracle.routers = {
+    SUSHISWAP: {
+      getAmountsOut: {
+        staticCall: async () => [10000n * 10n ** 6n, 9999n * 10n ** 6n],
+      },
+    },
+  };
+  oracle.liquidityValidator = { hasV2Liquidity: async () => false };
+  const r = await oracle.getPriceV2(
+    "SUSHISWAP",
+    "0xIN",
+    "0xOUT",
+    10000n * 10n ** 6n,
+  );
+  assert.strictEqual(r.amountOut, 0n, "illiquid pool must yield no quote");
+});
+
+test("V2 quote passes through when the pool is liquid", async () => {
+  const oracle = makeOracle(0n, 6n, 6n);
+  oracle.routers = {
+    SUSHISWAP: {
+      getAmountsOut: {
+        staticCall: async () => [10000n * 10n ** 6n, 9999n * 10n ** 6n],
+      },
+    },
+  };
+  oracle.liquidityValidator = { hasV2Liquidity: async () => true };
+  const r = await oracle.getPriceV2(
+    "SUSHISWAP",
+    "0xIN",
+    "0xOUT",
+    10000n * 10n ** 6n,
+  );
+  assert.strictEqual(
+    r.amountOut,
+    9999n * 10n ** 6n,
+    "liquid pool must yield a quote",
+  );
 });

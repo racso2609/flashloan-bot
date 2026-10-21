@@ -2,7 +2,7 @@
 const { ethers } = require("ethers");
 const config = require("../config/config");
 const PriceAggregator = require("./priceAggregator");
-const { filterOutlierQuotes, isSameVenueRoundTrip } = require("./routeValidation");
+const { bestRouteExcludingVenue } = require("./routeValidation");
 
 class SmartArbitrageFinder {
   constructor(provider, priceOracle, chainConfig) {
@@ -68,7 +68,9 @@ class SmartArbitrageFinder {
     const gasCostToken = await this.nativeToToken(this.gasCostNative, tokenIn);
 
     const profit =
-      opp.profit !== undefined && opp.profit !== null ? BigInt(opp.profit) : null;
+      opp.profit !== undefined && opp.profit !== null
+        ? BigInt(opp.profit)
+        : null;
     const premium = BigInt(opp.premium || 0);
     const netProfit = (profit !== null ? profit : 0n) - premium - gasCostToken;
 
@@ -94,7 +96,7 @@ class SmartArbitrageFinder {
   async findBestRoute(tokenIn, tokenOut, amountIn) {
     const routes = [];
     const availableRouters = Object.keys(this.priceOracle.routers || {});
-    
+
     if (!tokenIn || !tokenOut) return routes;
 
     // Try each DEX
@@ -136,20 +138,19 @@ class SmartArbitrageFinder {
       }
     }
 
-    // Drop routes whose quote is a gross outlier vs. the consensus. A V3
-    // quoter may return a plausible-but-fake amount for a pool with no
-    // initialized liquidity; keeping it inflates the spread with phantom
-    // edges (see routeValidation.js).
-    const validRoutes = filterOutlierQuotes(routes);
+    // NOTE: no magnitude-based outlier filter here. Pool liquidity is validated
+    // authoritatively inside the oracle (liquidityValidator), so every route
+    // that reaches this point is tradeable. Filtering by quote magnitude was
+    // wrong: it kept inflated phantoms and discarded real venues.
 
     // Sort by amountOut (best first)
-    validRoutes.sort((a, b) => {
+    routes.sort((a, b) => {
       if (a.amountOut > b.amountOut) return -1;
       if (a.amountOut < b.amountOut) return 1;
       return 0;
     });
 
-    return validRoutes;
+    return routes;
   }
 
   /**
@@ -175,11 +176,15 @@ class SmartArbitrageFinder {
 
     const bestSell = sellRoutes[0];
 
-    // Same-venue round-trip is never an arbitrage (only fees).
-    if (isSameVenueRoundTrip(bestBuy.dex, bestSell.dex)) return null;
+    // Selling on the same venue we bought from can only lose the fee twice.
+    // But that does not void the opportunity: a lower-ranked venue on the sell
+    // side may still give a real cross-venue edge, so pick the best compatible
+    // leg instead of aborting (this used to discard real arbitrages).
+    const sell = bestRouteExcludingVenue(sellRoutes, bestBuy.dex);
+    if (!sell) return null;
 
     // Calculate profit
-    const finalAmount = bestSell.amountOut;
+    const finalAmount = sell.amountOut;
     const profit = finalAmount - amountIn;
     const premium = (amountIn * 5n) / 10000n; // 0.05%
     const netProfit = profit - premium;
@@ -188,9 +193,9 @@ class SmartArbitrageFinder {
       tokenIn: WETH,
       tokenOut,
       buyDex: bestBuy.dex,
-      sellDex: bestSell.dex,
+      sellDex: sell.dex,
       buyAmount: bestBuy.amountOut,
-      sellAmount: bestSell.amountOut,
+      sellAmount: sell.amountOut,
       finalAmount,
       profit,
       netProfit,
@@ -245,12 +250,14 @@ class SmartArbitrageFinder {
 
         const bestBA = routesBA[0];
 
-        // A round-trip through the same pool only pays the fee twice — never
-        // an arbitrage. Skip it so it is not reported as an opportunity.
-        if (isSameVenueRoundTrip(bestAB.dex, bestBA.dex)) continue;
+        // Buying and selling on the same pool only pays the fee twice, so pick
+        // the best sell leg on a DIFFERENT venue. Aborting outright would throw
+        // away a real cross-venue edge just because the top venue matched.
+        const sellBA = bestRouteExcludingVenue(routesBA, bestAB.dex);
+        if (!sellBA) continue;
 
-        // Round-trip profit: sell on the best B → A route
-        const finalAmount = bestBA.amountOut;
+        // Round-trip profit: sell on the best cross-venue B → A route
+        const finalAmount = sellBA.amountOut;
         const profit = finalAmount - flashloanAmount;
         const premium = (flashloanAmount * 5n) / 10000n;
         const netProfit = profit - premium;
@@ -261,9 +268,9 @@ class SmartArbitrageFinder {
           tokenIn: tokenA.address,
           tokenOut: tokenB.address,
           buyDex: bestAB.dex,
-          sellDex: bestBA.dex,
+          sellDex: sellBA.dex,
           buyAmount: bestAB.amountOut,
-          sellAmount: bestBA.amountOut,
+          sellAmount: sellBA.amountOut,
           flashloanAmount,
           finalAmount,
           profit,
@@ -399,12 +406,14 @@ class SmartArbitrageFinder {
       const premium = (amountIn * 5n) / 10000n; // 0.05% flashloan fee
       const netProfit = profit - premium;
 
-      // A cycle where every leg routes through the same venue cannot beat its
-      // own fees — treat it as no opportunity rather than a phantom one.
+      // NOTE: do not discard cycles by venue name. Three legs through the same
+      // router are three DIFFERENT pools (A/B, B/C, C/A) and can be a real
+      // arbitrage — a mono-venue cycle only loses to its fees when it is the
+      // same pool, which A→B→C→A cannot be. The flashloan premium is already
+      // deducted above, so netProfit is the honest arbiter.
       const dex1 = routesAB[0].dex;
       const dex2 = routesBC[0].dex;
       const dex3 = routesCA[0].dex;
-      if (dex1 === dex2 && dex2 === dex3) return null;
 
       return {
         dex1,

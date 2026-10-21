@@ -32,6 +32,9 @@ const config = {
   
   // DEX Router addresses
   DEX_ROUTERS: chain.dexes,
+
+  // DEX factory addresses (for pool-liquidity validation)
+  DEX_FACTORIES: chain.factories || {},
   
   // Token addresses
   TOKENS: chain.tokens,
@@ -111,6 +114,26 @@ const config = {
   UNISWAP_V3_QUOTER_V2_ABI: [
     'function quoteExactInputSingle((address tokenIn, address tokenOut, uint256 fee, uint256 amountIn, uint160 sqrtPriceLimitX96)) external returns (uint256 amountOut, uint160 sqrtPriceX96After, uint32 initializedTicksCrossed, uint256 gasEstimate)',
     'function quoteExactInput(bytes path, uint256 amountIn) external returns (uint256 amountOut, uint160[] sqrtPriceX96AfterList)',
+  ],
+
+  // Liquidity validation: check the pool actually holds liquidity before
+  // trusting a quote. A quoter can return a plausible value for a pool with no
+  // initialized liquidity; the pool's own state is authoritative.
+  UNISWAP_V3_FACTORY_ABI: [
+    'function getPool(address tokenA, address tokenB, uint24 fee) view returns (address pool)',
+  ],
+  UNISWAP_V3_POOL_ABI: [
+    'function liquidity() view returns (uint128)',
+    'function slot0() view returns (uint160 sqrtPriceX96, int24 tick, uint16 observationIndex, uint16 observationCardinality, uint16 observationCardinalityNext, uint8 feeProtocol, bool unlocked)',
+    'function token0() view returns (address)',
+    'function token1() view returns (address)',
+  ],
+  UNISWAP_V2_FACTORY_ABI: [
+    'function getPair(address tokenA, address tokenB) view returns (address pair)',
+  ],
+  UNISWAP_V2_PAIR_ABI: [
+    'function getReserves() view returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast)',
+    'function token0() view returns (address)',
   ],
   
   // Explorer URL for logging
