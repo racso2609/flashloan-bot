@@ -8,6 +8,9 @@ cache/
 logs/
 node_modules/
 
+# Foundry dependencies (reproducible via foundry.lock)
+contracts/lib/
+
 # IDE
 .idea/
 .vscode/

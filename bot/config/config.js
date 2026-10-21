@@ -63,8 +63,12 @@ const config = {
     MAX_GAS_PRICE_GWEI: parseFloat(process.env.MAX_GAS_PRICE_GWEI || '1'),
     
     FLASHLOAN_AMOUNTS: {
-      USDC: '1000000000',          // 1000 USDC
-      USDC_E: '1000000000',        // 1000 USDC.e (Arbitrum only)
+      // NOTE (fork-test findings): native USDC/WETH pools on Arbitrum Sushi are
+      // very thin; 1000 USDC incurs huge slippage. USDC.e (bridged) pools are
+      // deep and usable at this size. On Base, native USDC/WETH has no usable
+      // UniV3 pool at all.
+      USDC: '50000000',            // 50 USDC  (thin native-USDC pools)
+      USDC_E: '1000000000',        // 1000 USDC.e (Arbitrum deep pool)
       WETH: '1000000000000000000', // 1 WETH
       DAI: '1000000000000000000',  // 1000 DAI
     },
