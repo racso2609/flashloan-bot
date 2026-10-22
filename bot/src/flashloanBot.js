@@ -4,7 +4,6 @@ require("dotenv").config();
 const { ethers } = require("ethers");
 const { getChainConfig, FLASHLOAN_ABI } = require("./chains");
 const PriceOracle = require("./priceOracle");
-const ArbitrageFinder = require("./arbitrageFinder");
 const SmartArbitrageFinder = require("./smartFinder");
 
 // Global config reference (set in constructor)
@@ -195,7 +194,6 @@ class FlashloanBot {
 
     // Initialize modules (pass chain config for tokens/DEXes)
     this.priceOracle = new PriceOracle(this.provider, config);
-    this.arbitrageFinder = new ArbitrageFinder(this.provider, this.priceOracle);
     this.smartFinder = new SmartArbitrageFinder(
       this.provider,
       this.priceOracle,

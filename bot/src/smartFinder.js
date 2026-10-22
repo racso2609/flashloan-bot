@@ -3,6 +3,7 @@ const { ethers } = require("ethers");
 const config = require("../config/config");
 const PriceAggregator = require("./priceAggregator");
 const { bestRouteExcludingVenue } = require("./routeValidation");
+const { flashloanPremium, netOfPremium } = require("./flashloanPremium");
 
 class SmartArbitrageFinder {
   constructor(provider, priceOracle, chainConfig) {
@@ -186,8 +187,8 @@ class SmartArbitrageFinder {
     // Calculate profit
     const finalAmount = sell.amountOut;
     const profit = finalAmount - amountIn;
-    const premium = (amountIn * 5n) / 10000n; // 0.05%
-    const netProfit = profit - premium;
+    const premium = flashloanPremium(amountIn);
+    const netProfit = netOfPremium(profit, amountIn);
 
     return {
       tokenIn: WETH,
@@ -259,8 +260,8 @@ class SmartArbitrageFinder {
         // Round-trip profit: sell on the best cross-venue B → A route
         const finalAmount = sellBA.amountOut;
         const profit = finalAmount - flashloanAmount;
-        const premium = (flashloanAmount * 5n) / 10000n;
-        const netProfit = profit - premium;
+        const premium = flashloanPremium(flashloanAmount);
+        const netProfit = netOfPremium(profit, flashloanAmount);
 
         opportunities.push({
           type: "stablecoin",
@@ -403,8 +404,8 @@ class SmartArbitrageFinder {
       // Calculate profit
       const finalAmount = routesCA[0].amountOut;
       const profit = finalAmount - amountIn;
-      const premium = (amountIn * 5n) / 10000n; // 0.05% flashloan fee
-      const netProfit = profit - premium;
+      const premium = flashloanPremium(amountIn);
+      const netProfit = netOfPremium(profit, amountIn);
 
       // NOTE: do not discard cycles by venue name. Three legs through the same
       // router are three DIFFERENT pools (A/B, B/C, C/A) and can be a real
