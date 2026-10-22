@@ -2,7 +2,7 @@
 // Uses multiple APIs and direct DEX queries for best results
 
 const config = require('../config/config');
-const { flashloanPremium } = require('./flashloanPremium');
+const { flashloanPremium, netOfPremium } = require('./flashloanPremium');
 
 class PriceAggregator {
   constructor(provider) {
@@ -111,7 +111,7 @@ class PriceAggregator {
     const finalAmount = bestSell.amountOut;
     const profit = finalAmount - amountIn;
     const premium = flashloanPremium(amountIn);
-    const netProfit = profit - premium;
+    const netProfit = netOfPremium(profit, amountIn);
     
     return {
       tokenIn,

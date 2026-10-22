@@ -1,39 +1,54 @@
 // Aave V3 flashloan premium.
 //
-// Aave V3 charges a fixed 0.05% (5 bps) premium on `flashLoanSimple`, and the
-// contract repays `amount + premium` where `premium` is what the pool passes to
-// `executeOperation` (see contracts/src/Flashloan.sol). That value is set by the
-// pool, not by us, so it must stay in sync with the deployed Aave pool config.
+// Aave V3 charges a fixed premium on `flashLoanSimple`. The pool computes it in
+// FlashLoanLogic.sol as `amount.percentMulCeil(FLASHLOAN_PREMIUM_TOTAL)`, i.e.
+// it ROUNDS UP (PercentageMath.percentMulCeil = floor(product/10000) plus 1 when
+// there is any remainder). Our estimate must match that direction: if we rounded
+// down we would under-count the repayment and could size a trade the contract
+// rejects ("Not enough to repay loan") or, worse, treat a loss as a profit.
 //
-// It used to be hardcoded as `(amount * 5n) / 10000n` in ~7 places, which means a
-// pool fee change would silently make every netProfit estimate wrong (and could
-// let the bot execute at a loss). Centralised here and overridable via
-// AAVE_FLASHLOAN_PREMIUM_BPS for future pools/forks.
+// FLASHLOAN_PREMIUM_TOTAL is 5 bps (0.05%) on Arbitrum and Base (verified
+// on-chain). It used to be hardcoded as `(amount * 5n) / 10000n` (truncating) in
+// ~7 places; centralised here and overridable via AAVE_FLASHLOAN_PREMIUM_BPS.
 
+const PERCENTAGE_FACTOR = 10000n;
 const DEFAULT_PREMIUM_BPS = 5n; // 0.05%
 
-function resolvePremiumBps() {
-  const raw = process.env.AAVE_FLASHLOAN_PREMIUM_BPS;
-  if (raw === undefined || raw === "") return DEFAULT_PREMIUM_BPS;
-  let parsed;
+/**
+ * Parse the env override. Accepts only a non-negative decimal integer (optional
+ * leading '+'). Anything else - whitespace, hex, decimals, exponents, negatives
+ * - falls back to the default rather than silently becoming 0 or a wrong value.
+ */
+function parsePremiumBps(raw) {
+  if (raw === undefined || raw === null) return DEFAULT_PREMIUM_BPS;
+  const trimmed = String(raw).trim();
+  if (trimmed === "") return DEFAULT_PREMIUM_BPS;
+  if (!/^\+?\d+$/.test(trimmed)) return DEFAULT_PREMIUM_BPS;
   try {
-    parsed = BigInt(raw);
+    const parsed = BigInt(trimmed);
+    if (parsed < 0n) return DEFAULT_PREMIUM_BPS;
+    return parsed;
   } catch {
     return DEFAULT_PREMIUM_BPS;
   }
-  if (parsed < 0n) return DEFAULT_PREMIUM_BPS;
-  return parsed;
 }
 
-const PREMIUM_BPS = resolvePremiumBps();
+// Read once at load time (PM2 fixes env at boot). Tests that need another value
+// must clear require.cache for this module.
+const PREMIUM_BPS = parsePremiumBps(process.env.AAVE_FLASHLOAN_PREMIUM_BPS);
 
 /**
- * Premium Aave V3 will charge on a flashloan of `amount`.
+ * Premium Aave V3 will charge on a flashloan of `amount`, matching the pool's
+ * percentMulCeil rounding (rounds UP).
  * @param {bigint} amount borrowed amount, in the asset's smallest unit
  * @returns {bigint} premium, same unit
  */
 function flashloanPremium(amount) {
-  return (BigInt(amount) * PREMIUM_BPS) / 10000n;
+  const value = BigInt(amount);
+  const product = value * PREMIUM_BPS;
+  const floor = product / PERCENTAGE_FACTOR;
+  const hasRemainder = product % PERCENTAGE_FACTOR !== 0n;
+  return hasRemainder ? floor + 1n : floor;
 }
 
 /**
@@ -47,8 +62,10 @@ function netOfPremium(profit, amount) {
 }
 
 module.exports = {
+  PERCENTAGE_FACTOR,
   DEFAULT_PREMIUM_BPS,
   PREMIUM_BPS,
+  parsePremiumBps,
   flashloanPremium,
   netOfPremium,
 };
