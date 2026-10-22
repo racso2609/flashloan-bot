@@ -9,9 +9,13 @@ interface IQuoterV2 {
     // Classic Quoter signature (5 scalar args). Used by the Arb/Base Quoter
     // deployments addressed here; the struct-based QuoterV2 overload reverts
     // on these chains.
-    function quoteExactInputSingle(address tokenIn, address tokenOut, uint24 fee, uint256 amountIn, uint160 sqrtPriceLimitX96)
-        external
-        returns (uint256 amountOut);
+    function quoteExactInputSingle(
+        address tokenIn,
+        address tokenOut,
+        uint24 fee,
+        uint256 amountIn,
+        uint160 sqrtPriceLimitX96
+    ) external returns (uint256 amountOut);
 }
 
 interface IV2Router {
@@ -130,14 +134,10 @@ contract ForkArbitrageTest is Test {
         vm.label(providerAddr, "AaveProvider");
     }
 
-    function _scan(
-        address quoter,
-        address sushi,
-        address usdc,
-        address weth,
-        uint24[4] memory fees,
-        uint256 loan
-    ) internal returns (uint256 bestFinal, bool bestUniBuy, uint24 bestFee, bool found) {
+    function _scan(address quoter, address sushi, address usdc, address weth, uint24[4] memory fees, uint256 loan)
+        internal
+        returns (uint256 bestFinal, bool bestUniBuy, uint24 bestFee, bool found)
+    {
         for (uint256 i = 0; i < fees.length; i++) {
             for (uint256 d = 0; d < 2; d++) {
                 bool uniBuy = d == 0;
@@ -164,15 +164,22 @@ contract ForkArbitrageTest is Test {
         SwapLeg memory leg1;
         SwapLeg memory leg2;
         if (uniBuy) {
-            leg1 = SwapLeg({dexType: DexType.UNISWAP_V3, router: c.v3Router, path: _p(c.usdc, c.weth), fee: fee, amountOutMin: 0});
-            leg2 = SwapLeg({dexType: DexType.UNISWAP_V2, router: c.sushi, path: _p(c.weth, c.usdc), fee: 0, amountOutMin: 0});
+            leg1 = SwapLeg({
+                dexType: DexType.UNISWAP_V3, router: c.v3Router, path: _p(c.usdc, c.weth), fee: fee, amountOutMin: 0
+            });
+            leg2 = SwapLeg({
+                dexType: DexType.UNISWAP_V2, router: c.sushi, path: _p(c.weth, c.usdc), fee: 0, amountOutMin: 0
+            });
         } else {
-            leg1 = SwapLeg({dexType: DexType.UNISWAP_V2, router: c.sushi, path: _p(c.usdc, c.weth), fee: 0, amountOutMin: 0});
-            leg2 = SwapLeg({dexType: DexType.UNISWAP_V3, router: c.v3Router, path: _p(c.weth, c.usdc), fee: fee, amountOutMin: 0});
+            leg1 = SwapLeg({
+                dexType: DexType.UNISWAP_V2, router: c.sushi, path: _p(c.usdc, c.weth), fee: 0, amountOutMin: 0
+            });
+            leg2 = SwapLeg({
+                dexType: DexType.UNISWAP_V3, router: c.v3Router, path: _p(c.weth, c.usdc), fee: fee, amountOutMin: 0
+            });
         }
 
-        ArbitrageParams memory params =
-            ArbitrageParams({leg1: leg1, leg2: leg2, profitRecipient: address(0xBEAF)});
+        ArbitrageParams memory params = ArbitrageParams({leg1: leg1, leg2: leg2, profitRecipient: address(0xBEAF)});
 
         uint256 balBefore = IERC20(c.usdc).balanceOf(address(0xBEAF));
 
@@ -425,14 +432,10 @@ contract ForkArbitrageTest is Test {
         assertTrue(reverted, "same-DEX round trip should not be profitable and must revert");
     }
 
-    function _sushiOnly(
-        address pool,
-        address provider,
-        address sushi,
-        address usdc,
-        address weth,
-        uint256 loan
-    ) internal returns (bool reverted) {
+    function _sushiOnly(address pool, address provider, address sushi, address usdc, address weth, uint256 loan)
+        internal
+        returns (bool reverted)
+    {
         Flashloan fl = new Flashloan(pool, provider, address(this));
         SwapLeg memory leg1 =
             SwapLeg({dexType: DexType.UNISWAP_V2, router: sushi, path: _p(usdc, weth), fee: 0, amountOutMin: 0});

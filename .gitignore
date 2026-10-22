@@ -4,3 +4,5 @@ logs
 .DS_Store
 .next
 out
+/lib/
+contracts/cache/

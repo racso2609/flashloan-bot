@@ -11,9 +11,6 @@ via_ir = true
 # RPC endpoints (use environment variables in .env)
 # arbitrum_one = "https://arb1.arbitrum.io/rpc"
 
-[profile.test]
-fuzz_runs = 256
-
 # Script configuration
 [profile.script]
 src = "script"

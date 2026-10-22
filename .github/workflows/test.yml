@@ -7,15 +7,15 @@ on:
   pull_request:
   workflow_dispatch:
 
-env:
-  FOUNDRY_PROFILE: ci
-
 jobs:
-  check:
-    name: Foundry project
+  contracts:
+    name: Contracts (fmt + build + unit tests)
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    defaults:
+      run:
+        working-directory: contracts
     steps:
       - uses: actions/checkout@v5
         with:
@@ -24,6 +24,10 @@ jobs:
 
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
+        with:
+          # Pinned: vm.skip(bool) is a forge cheatcode, not a forge-std helper, so
+          # the job depends on the binary actually supporting it.
+          version: v1.8.6
 
       - name: Show Forge version
         run: forge --version
@@ -32,7 +36,42 @@ jobs:
         run: forge fmt --check
 
       - name: Run Forge build
-        run: forge build --sizes
+        run: forge build --sizes --locked
 
-      - name: Run Forge tests
-        run: forge test -vvv
+      # The fork suites (ForkArbitrageTest) need a live RPC endpoint and are out of
+      # scope for push/PR CI, as are the four fork-only cases in FlashloanTest.
+      # Those four use vm.skip() so they are reported as skipped rather than
+      # silently passing. Run the full suite locally with a fork RPC to cover them.
+      - name: Run unit tests (no RPC required)
+        run: SKIP_FORK=true forge test --no-match-contract ForkArbitrage
+
+  bot:
+    name: Bot tests (node --test)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: bot
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      # Reads `packageManager` from bot/package.json, so the pinned pnpm version
+      # (9.15.9) stays a single source of truth instead of being duplicated here.
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          package_json_file: bot/package.json
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run bot tests
+        run: pnpm test

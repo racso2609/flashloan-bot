@@ -368,8 +368,9 @@ contract FlashloanTest is Test {
     }
 
     function testFlashloanSuccess() public {
-        // Only run with fork
-        if (skipFork) return;
+        // Fork-only: report as skipped so the suite never claims coverage it
+        // did not get (a bare `return` would be counted as a pass).
+        if (skipFork) vm.skip(true);
 
         // Check initial balance
         uint256 initialBalance = usdc.balanceOf(address(flashloan));
@@ -389,8 +390,9 @@ contract FlashloanTest is Test {
     }
 
     function testFlashloanApprovalMechanism() public {
-        // Only run with fork
-        if (skipFork) return;
+        // Fork-only: report as skipped so the suite never claims coverage it
+        // did not get (a bare `return` would be counted as a pass).
+        if (skipFork) vm.skip(true);
 
         // This test focuses specifically on the approval mechanism
         vm.prank(address(this));
@@ -401,8 +403,9 @@ contract FlashloanTest is Test {
     }
 
     function testEventEmissions() public {
-        // Only run with fork
-        if (skipFork) return;
+        // Fork-only: report as skipped so the suite never claims coverage it
+        // did not get (a bare `return` would be counted as a pass).
+        if (skipFork) vm.skip(true);
 
         // Test LoanRequested event
         vm.expectEmit(true, true, false, true);
@@ -439,8 +442,9 @@ contract FlashloanTest is Test {
     }
 
     function testZeroLoanAmount() public {
-        // Only run with fork
-        if (skipFork) return;
+        // Fork-only: report as skipped so the suite never claims coverage it
+        // did not get (a bare `return` would be counted as a pass).
+        if (skipFork) vm.skip(true);
 
         // Test edge case with zero loan amount
         vm.expectEmit(true, true, false, true);
